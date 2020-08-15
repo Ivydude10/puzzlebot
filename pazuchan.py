@@ -53,3 +53,7 @@ class PazuChan(Bot):
         )
         embed.set_author(name=f"{self.BOT_NAME} commands")
         await channel.send(embed=embed)
+
+if __name__ == '__main__':
+    pazu = PazuChan()
+    pazu.run()
