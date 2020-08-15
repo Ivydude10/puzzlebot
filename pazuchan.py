@@ -56,4 +56,4 @@ class PazuChan(Bot):
 
 if __name__ == '__main__':
     pazu = PazuChan()
-    pazu.run()
+    pazu.run(os.getenv('DISCORD_TOKEN'))
