@@ -8,7 +8,10 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 import discord
-from discord.ext.commands import Bot, has_permissions, CommandNotFound, has_any_role
+from discord.ext.commands import Bot, has_permissions, CommandNotFound, has_any_role, command
+
+from cogs.chatter import Chatter
+from cogs.puzzlehunt import PuzzleHunt
 
 load_dotenv()
 
@@ -22,19 +25,24 @@ class PazuChan(Bot):
     """
     BOT_NAME = 'Pazu-chan'
 
-    BOT_PREFIX = '!puz'
-    ADMIN_PREFIX = '!admin'
+    BOT_PREFIX = '?'
+    # ADMIN_PREFIX = '?'
 
     """
     INITIALISATION
     """
     def __init__(self):
+        super().__init__(PazuChan.BOT_PREFIX)
         self.db = psycopg2.connect(os.getenv("DATABASE_URL"), sslmode="require")
         self.db_cursor = self.db.cursor()
 
         self.last_updated_status = datetime.now()
         self.add_listener(self.on_ready)
         self.add_listener(self.on_command_error)
+        # Cogs
+        self.add_cog(Chatter(self))
+        self.add_cog(PuzzleHunt(self))
+
 
     """
     HELPER FUNCTIONS
@@ -47,12 +55,14 @@ class PazuChan(Bot):
     """
     MEMBER FUNCTIONS
     """
+    @command(name="help")
     async def help(self, channel):
         embed = discord.Embed(
-            colour = discord.Colour.dark_red()
+            colour = discord.Colour.green()
         )
         embed.set_author(name=f"{self.BOT_NAME} commands")
         await channel.send(embed=embed)
+
 
 if __name__ == '__main__':
     pazu = PazuChan()

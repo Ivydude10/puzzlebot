@@ -1,5 +1,8 @@
 import asyncio
+import random
 from datetime import datetime
+
+import discord
 from discord.ext import commands
 
 class Chatter(commands.Cog):
@@ -21,6 +24,7 @@ class Chatter(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.bot.remove_command("help")
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
@@ -29,15 +33,15 @@ class Chatter(commands.Cog):
                 """Welcome {0.mention}! Come introduce yourself in #introductions.""".format(member))
 
     @commands.Cog.listener()
-    async def on_ready(self, msg):
+    async def on_ready(self):
         print('Cog "Chatter" Ready!')
-        await self.change_status()
         await self.get_channels()
         await self.get_statuses()
+        await self.change_status()
 
     async def get_channels(self):
-        for channel_type in self.CHANNELS.keys:
-            self.bot.db_cursor.execute("select channelid from puzzledb.channels where channel_type = '{}';".format(channel_type))
+        for channel_type in self.CHANNELS.keys():
+            self.bot.db_cursor.execute("select channelid from puzzledb.channels where channeltype = '{}';".format(channel_type))
             channelid = self.bot.db_cursor.fetchone()[0]
             self.CHANNELS[channel_type] = self.bot.get_channel(channelid)
 
@@ -49,9 +53,9 @@ class Chatter(commands.Cog):
         wait_time = 0
         last_updated_status = datetime.now()
         while True:
-            if datetime.now() - last_updated_status >= wait_time:
-                await self.change_presence(
-                    discord.Activity(
+            if (datetime.now() - last_updated_status).seconds >= wait_time:
+                await self.bot.change_presence(
+                    activity=discord.Activity(
                         type=discord.ActivityType.playing,
                         name=random.choice(self.RANDOM_STATUSES)
                     )
@@ -61,10 +65,11 @@ class Chatter(commands.Cog):
                 await asyncio.sleep(wait_time)
             await asyncio.sleep(10) # Generic short wait
 
-    @commands.Cog.listener
     async def on_command_error(self, ctx, error):
         if isinstance(error, CommandNotFound):
             return
         if self.LOG_CHANNEL:
             await self.bot.get_channel(self.LOG_CHANNEL).send(str(error))
         raise error
+
+    
