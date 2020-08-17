@@ -3,9 +3,9 @@ import random
 from datetime import datetime
 
 import discord
-from discord.ext import commands
+from discord.ext.commands import Cog
 
-class Chatter(commands.Cog):
+class Chatter(Cog):
     """
     Cog for general chatting, greeting and other text functions
     """
@@ -17,22 +17,18 @@ class Chatter(commands.Cog):
         #   'Cryptic',
         # and more...
     ]
-    CHANNELS = {
-        'LOG': 0,
-        'GREET': 0
-    }
 
     def __init__(self, bot):
         self.bot = bot
         self.bot.remove_command("help")
 
-    @commands.Cog.listener()
+    @Cog.listener()
     async def on_member_join(self, member):
-        if self.CHANNELS['GREET']:
-            await self.CHANNELS['GREET'].send(
+        if self.bot.CHANNELS['GREET']:
+            await self.bot.CHANNELS['GREET'].send(
                 """Welcome {0.mention}! Come introduce yourself in #introductions.""".format(member))
 
-    @commands.Cog.listener()
+    @Cog.listener()
     async def on_ready(self):
         print('Cog "Chatter" Ready!')
         await self.get_channels()
@@ -40,10 +36,10 @@ class Chatter(commands.Cog):
         await self.change_status()
 
     async def get_channels(self):
-        for channel_type in self.CHANNELS.keys():
-            self.bot.db_cursor.execute("select channelid from puzzledb.channels where channeltype = '{}';".format(channel_type))
+        for channeltype in self.bot.CHANNELS.keys():
+            self.bot.db_cursor.execute("select channelid from puzzledb.channels where channeltype = '{}';".format(channeltype))
             channelid = self.bot.db_cursor.fetchone()[0]
-            self.CHANNELS[channel_type] = self.bot.get_channel(channelid)
+            self.bot.CHANNELS[channeltype] = self.bot.get_channel(channelid)
 
     async def get_statuses(self):
         self.bot.db_cursor.execute("select status from puzzledb.statuses;")
@@ -65,11 +61,5 @@ class Chatter(commands.Cog):
                 await asyncio.sleep(wait_time)
             await asyncio.sleep(10) # Generic short wait
 
-    async def on_command_error(self, ctx, error):
-        if isinstance(error, CommandNotFound):
-            return
-        if self.LOG_CHANNEL:
-            await self.bot.get_channel(self.LOG_CHANNEL).send(str(error))
-        raise error
-
+    
     
