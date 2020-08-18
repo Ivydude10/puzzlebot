@@ -34,7 +34,7 @@ class PuzzleHunt(commands.Cog):
         embed = discord.Embed(
             colour = discord.Colour.dark_red()
         )
-        embed.set_author(name=f"{self.bot.BOT_NAME}'s Puzzle Hunt commands")
+        embed.set_author(name=f"{self.bot.BOT_NAME}'s Puzzle Hunt Commands:")
         await ctx.send(embed=embed)
         # hunt_info = ("Hello, I am Pazu-chan, and welcome to the " + bold(self.hunt_info['Name']) + " puzzle hunt"
 

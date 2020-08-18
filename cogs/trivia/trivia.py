@@ -41,9 +41,9 @@ SMART_QUOTE_REPLACEMENT_DICT = {
 }
 SMART_QUOTE_REPLACE_RE = re.compile("|".join(SMART_QUOTE_REPLACEMENT_DICT.keys()))
 
-DELAY = 12
-TIMEOUT = 20
-MAX_SCORE = 10
+DELAY = 12      # How long between questions
+TIMEOUT = 20    # How long before session stops if no one responds
+MAX_SCORE = 10  # How many points to win
 
 class Trivia(Cog):
     """
@@ -92,15 +92,15 @@ class Trivia(Cog):
         embed.add_field(
             name="trivia start <category>",
             value="Begin trivia session",
-            inline=True)
+            )
         embed.add_field(
             name="trivia stop",
             value="End trivia session",
-            inline=True)
+            )
         embed.add_field(
             name="trivia list",
             value="View categories",
-            inline=True)
+            )
         await ctx.send(embed=embed)
 
     @trivia.command(name="list")
@@ -229,7 +229,7 @@ class Trivia(Cog):
 
     async def end_game(self, ctx):
         """End the trivia session and display scrores."""
-        if self.session['Scores']:
+        if self.session:
             await self.send_table(ctx)
         self.session = None
 
