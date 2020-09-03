@@ -15,6 +15,7 @@ from cogs.puzzlehunt import PuzzleHunt
 from cogs.database import Database
 from cogs.trivia import Trivia
 from cogs.triplet import Triplet
+from cogs.layton import Layton
 
 load_dotenv()
 
@@ -58,6 +59,7 @@ class PazuChan(Bot):
         self.add_cog(Database(self))
         self.add_cog(Trivia(self))
         self.add_cog(Triplet(self))
+        self.add_cog(Layton(self))
 
 
     """
@@ -101,6 +103,7 @@ if __name__ == '__main__':
             embed.add_field(name="?hunt", value="Join a running puzzle hunt")
             embed.add_field(name="?roll NdN", value="Roll N dice each with N faces")
             embed.add_field(name="?triplet", value="Solve a triplet word puzzle")
+            embed.add_field(name="?layton", value="Solve a puzzle from Professor Layton")
         else:
             embed.set_author(name=f"{pazu.BOT_NAME} {cogname[0].strip().title()} Commands:")
         await ctx.send(embed=embed)
