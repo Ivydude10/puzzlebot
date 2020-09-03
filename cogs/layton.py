@@ -14,7 +14,7 @@ from discord.ext.commands import has_any_role, Cog, group
 
 # bold = lambda s: "**" + s + "**"
 
-EMBED_COLOUR = discord.Colour.orange()
+EMBED_COLOUR = discord.Colour.purple()
 
 _SUCCESS_SOUNDBITES = [
     "Hmm... that should do it!",
@@ -39,15 +39,6 @@ _START_SOUNDBITES = [
 
 HINT_TEXT = """There are no more hints. \n
 If you are stuck, use \"?layton solve <puzzleID>\" to see the answer."""
-
-
-def get_puzzle_text(puzzle_dict):
-    text = '"' + random.choice(_START_SOUNDBITES) + \
-        "\"\n\n**" + puzzle_dict['title'] + \
-        "**\n" + puzzle_dict['puzzle'] + \
-        (puzzle_dict['image'] if puzzle_dict['image'] else '=' * 12 + '**The image may be missing.**' + '=' * 12) + \
-        "\n" + f"*This is puzzle {puzzle_dict['number']} from {puzzle_dict['game']}.\nPuzzle ID: `{puzzle_dict['id']}`*"
-    return text
 
 
 class Layton(commands.Cog):
@@ -105,17 +96,39 @@ class Layton(commands.Cog):
             if not self._current_puzzle:
                 await ctx.send("I've failed to retrieve a puzzle. Please try again.")
                 return
-            await ctx.send(get_puzzle_text(self._current_puzzle))
-            text = ''
+            embed = discord.Embed(
+                colour = EMBED_COLOUR
+            )
+            # await ctx.send(get_puzzle_text(self._current_puzzle))
+            puzzle_dict = self._current_puzzle
+            if puzzle_dict['image']:
+                embed.set_image(url=puzzle_dict['image'])
+            else:
+                embed.add_field(name="Image missing", value="You may have to look up the image.")
+            # embed.set_author(name=puzzle_dict['title'])
+            embed.add_field(
+                name=puzzle_dict['title'],
+                value=puzzle_dict['puzzle'],
+                inline=False
+            )
+            embed.add_field(
+                name=f"Puzzle ID: `{puzzle_dict['id']}`",
+                value=f"*This is puzzle {puzzle_dict['number']} from {puzzle_dict['game']}.*",
+                inline=False
+            )
+            footer_text = ''
             if self._current_puzzle['hints']:
-                text = "There are hints available for this puzzle. Type \"?layton hint\" to see one.\n"
-            text += "This puzzle is worth {} Picarats!".format(self._current_puzzle['picarats'])
+                footer_text = "There are hints available for this puzzle. Type \"?layton hint\" to see one.\n"
+            footer_text += "This puzzle is worth {} Picarats!".format(self._current_puzzle['picarats'])
             if answers:
                 self._current_puzzle['set_answer'] = True
-                await ctx.send(text + "\nYou can attempt an answer by replying.")
-                continue_ = await self.wait_for_answer(ctx, answers, 1, 900)
+                footer_text += "\n**You can attempt an answer by replying.**"
             else:
-                await ctx.send(text + "\nType \"?layton solve\" to check your answer!")
+                footer_text += "\nType \"?layton solve\" to check your answer!"
+            embed.set_footer(text=footer_text)
+            await ctx.send(embed=embed)
+            if answers:
+                continue_ = await self.wait_for_answer(ctx, answers, 1, 900)
         else:
             clue, ans_len = self._current_puzzle
             ans = self._all_clues[clue]
@@ -157,7 +170,7 @@ class Layton(commands.Cog):
     @layton.group(name='solve', invoke_without_command=True)
     async def layton_solve(self, ctx: commands.Context, *puzzle_id : str):
         """Get the solution to the last puzzle, or by puzzle ID."""
-        print(puzzle_id)
+        print("Layton:", puzzle_id)
         if self._current_puzzle is None and not puzzle_id:
             await ctx.send("I'm not sure which puzzle you mean. Add the Puzzle ID?")
             return
@@ -174,10 +187,16 @@ class Layton(commands.Cog):
         if puzzle == self._current_puzzle and 'set_answer' in puzzle:
             await ctx.send("A gentleman should not give away the answer when there are picarats on the line!")
             return
-        solution = puzzle['solution']
-        title = puzzle['title']
-        sol_imgs = puzzle['solution_images']
-        await ctx.send(f"\"{random.choice(_SUCCESS_SOUNDBITES)}\"\n\n**{title} - Solution**\n{solution}!\n" + '\n'.join(sol_imgs))
+        embed = discord.Embed(
+            colour = EMBED_COLOUR
+        )
+        embed.set_image(url=puzzle['solution_images'][0])
+        embed.add_field(
+            name=puzzle['title'] + " SOLUTION",
+            value=puzzle['solution'],
+            inline=False
+        )
+        await ctx.send(embed=embed)
 
     @layton.command(name='hint')
     async def layton_hint(self, ctx: commands.Context):
@@ -188,12 +207,22 @@ class Layton(commands.Cog):
         if not self._current_puzzle['hints']:
             await ctx.send("I'm fresh out of hints to give. Looks like you're on your own.")
             return
-        hint_no, hint = self._current_puzzle['hints'].pop(0)
-        title = self._current_puzzle['title']
-        text = '\nThere are no more hints.'
-        if self._current_puzzle['hints']:
-            text = '\nMore hints are available.'
-        await ctx.send(f"**{title} - Hint {hint_no}**\n{hint}!" + text)
+        puzzle_dict = self._current_puzzle
+        hint_no, hint = puzzle_dict['hints'].pop(0)
+        title = puzzle_dict['title']
+        footer_text = '\nThere are no more hints.'
+        if puzzle_dict['hints']:
+            footer_text = '\nMore hints are available.'
+        embed = discord.Embed(
+            colour = EMBED_COLOUR
+        )
+        embed.add_field(
+            name=puzzle_dict['title'] + " HINT " + str(hint_no),
+            value=hint,
+            inline=False
+        )
+        embed.set_footer(text=footer_text)
+        await ctx.send(embed=embed)
 
 
 class MyHTMLParser(HTMLParser):

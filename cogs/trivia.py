@@ -10,7 +10,7 @@ from datetime import datetime
 import discord
 from discord.ext.commands import Cog, group
 
-EMBED_COLOUR = discord.Colour.purple()
+EMBED_COLOUR = discord.Colour.orange()
 
 _ = lambda s: s
 bold = lambda s: "**" + s + "**"
