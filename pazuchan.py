@@ -28,8 +28,7 @@ class PazuChan(Bot):
     # made by Duc Vu #
     ##################
     """
-    BOT_NAME = 'Pazu-chan'
-
+    BOT_NAME = os.getenv('BOT_NAME')
     BOT_PREFIX = os.getenv('BOT_PREFIX')
     # ADMIN_PREFIX = '?'
 
