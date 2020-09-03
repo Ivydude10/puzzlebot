@@ -16,8 +16,12 @@ class Database(Cog):
     @command(name="query")
     async def query(self, ctx, *query):
         query = ' '.join(query)
-        print(query)
+        print('?' + query)
 
     @Cog.listener()
     async def on_ready(self):
         print('Cog "Database" Ready!')
+
+
+def setup(bot):
+    bot.add_cog(Database(bot))
