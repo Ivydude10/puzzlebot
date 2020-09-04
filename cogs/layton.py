@@ -163,7 +163,6 @@ class Layton(commands.Cog):
             # if early_exit:
             #     return False
             guess = message.content.lower()
-            guess = normalize_smartquotes(guess)
             return any([guess == ans for ans in answers])
         return _pred
 
