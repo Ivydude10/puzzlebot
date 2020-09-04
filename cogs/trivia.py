@@ -41,7 +41,7 @@ SMART_QUOTE_REPLACEMENT_DICT = {
 }
 SMART_QUOTE_REPLACE_RE = re.compile("|".join(SMART_QUOTE_REPLACEMENT_DICT.keys()))
 
-DELAY = 12      # How long between questions
+DELAY = 15      # How long between questions
 TIMEOUT = 90    # How long before session stops if no one responds
 MAX_SCORE = 10  # How many points to win
 
