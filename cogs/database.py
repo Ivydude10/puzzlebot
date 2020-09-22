@@ -23,8 +23,7 @@ class Database(Cog):
             await ctx.send("Nice try.")
             return
         try:
-            self.bot.db_cursor.execute(query)
-            res = self.bot.db_cursor.fetchall()
+            res = self.bot.db_execute(query).fetchall()
             await ctx.send(str(res))
         except Exception as e:
             self.bot.db.rollback()

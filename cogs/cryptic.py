@@ -11,6 +11,7 @@ from discord.ext import commands
 from discord.ext.commands import has_any_role, Cog, group
 
 EMBED_COLOUR = discord.Colour.dark_grey()
+DIFFICULTY_MARKER = "🌶️"
 
 class Cryptic(commands.Cog):
     """
@@ -19,9 +20,9 @@ class Cryptic(commands.Cog):
     """
     MAIN_URL = "https://xsolver.net"
     CRYPTIC_URLS = [
-        "{}/crosswords/Guardian%20Cryptic".format(MAIN_URL),
-        "{}/crosswords/Daily%20Cryptic".format(MAIN_URL),
-        "{}/crosswords/Cryptic%20crossword".format(MAIN_URL)
+        ("{}/crosswords/Guardian%20Cryptic".format(MAIN_URL), 3),
+        ("{}/crosswords/Daily%20Cryptic".format(MAIN_URL), 3),
+        ("{}/crosswords/Cryptic%20crossword".format(MAIN_URL), 2)
     ]
 
     def __init__(self, bot):
@@ -36,11 +37,11 @@ class Cryptic(commands.Cog):
 
     @group(name="cryptic", invoke_without_command=True)
     async def cryptic(self, ctx):
-        url = random.choice(Cryptic.CRYPTIC_URLS)
-
         async with ctx.typing():
             # Use a saved list of 100 clues, refresh every hour
             if self.clues is None or len(self.clues) == 0 or time.time() - self.last_get > 3600:
+                url, diff = random.choice(Cryptic.CRYPTIC_URLS)
+                
                 res = self.get_site(url)
                 if res is None:
                     await ctx.send("Failed to connect to cryptic database!")
@@ -71,6 +72,9 @@ class Cryptic(commands.Cog):
             colour = EMBED_COLOUR
         )
         embed.set_author(name=clue_text)
+        # embed.add_field(
+        #     name=clue_text,
+        #     value='Difficulty: ' + DIFFICULTY_MARKER * diff)
         await ctx.send(embed=embed)
         await self.wait_for_answer(ctx, answer, 1, 900)
 

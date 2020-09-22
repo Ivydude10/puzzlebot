@@ -43,7 +43,7 @@ class PazuChan(Bot):
     def __init__(self):
         super().__init__(command_prefix=PazuChan.BOT_PREFIX)
         self.db = psycopg2.connect(os.getenv("DATABASE_URL"), sslmode="require")
-        self.db_cursor = self.db.cursor()
+        self.db.autocommit = True
 
         self.startup_time = datetime.now()
         self.last_updated_status = datetime.now()
@@ -89,6 +89,13 @@ class PazuChan(Bot):
             print("No log channel found!!!")
             raise e
 
+    """
+    DATABASE WRAPPER
+    """
+    def db_execute(self, query, arguments=()):
+        cursor = self.db.cursor()
+        cursor.execute(query, arguments)
+        return cursor
 
 if __name__ == '__main__':
     pazu = PazuChan()

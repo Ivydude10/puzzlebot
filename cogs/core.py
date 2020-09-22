@@ -40,16 +40,16 @@ class Core(Cog):
         await self.change_status()
 
     async def get_channels(self):
-        self.bot.db_cursor.execute("select channelid, serverid, channeltype from puzzledb.channels;")
-        for channelid, serverid, channeltype in self.bot.db_cursor.fetchall():
+        cursor = self.bot.db_execute("select channelid, serverid, channeltype from puzzledb.channels;")
+        for channelid, serverid, channeltype in cursor.fetchall():
             serverid = int(serverid)
             self.bot.CHANNELS[serverid] = self.bot.CHANNELS.get(serverid, {})
             self.bot.CHANNELS[serverid].update({channeltype: self.bot.get_channel(channelid)})
         # print(self.bot.CHANNELS)
 
     async def get_statuses(self):
-        self.bot.db_cursor.execute("select status from puzzledb.statuses;")
-        self.RANDOM_STATUSES = self.bot.db_cursor.fetchall()
+        cursor = self.bot.db_execute("select status from puzzledb.statuses;")
+        self.RANDOM_STATUSES = cursor.fetchall()
 
     async def change_status(self):
         wait_time = 0
