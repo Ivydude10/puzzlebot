@@ -212,7 +212,7 @@ class PuzzleHunt(commands.Cog):
         """
         embed = discord.Embed(colour=EMBED_COLOUR)
         if self._huntid is not None:
-            embed.set_author(name="Puzzle Hunt Commands:")
+            embed.set_author(name="`?hunt` Commands:")
             embed.add_field(
                 name="join <team name>",
                 value="Join / create a team",
