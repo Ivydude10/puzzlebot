@@ -26,7 +26,7 @@ class Core(Cog):
     @Cog.listener()
     async def on_member_join(self, member):
         try:
-            greet_channel = self.bot.CHANNELS[member.server.id]['GREET']
+            greet_channel = self.bot.CHANNELS[member.guild.id]['GREET']
             await greet_channel.send(
                 """Welcome {0.mention}! Come introduce yourself in #introductions.""".format(member))
         except:

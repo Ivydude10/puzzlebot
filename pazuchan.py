@@ -74,7 +74,7 @@ class PazuChan(Bot):
 
     async def on_command_error(self, ctx, error):
         if isinstance(error, CommandNotFound):
-            return  
+            return
         await self.log(ctx, str(error))
         raise error
 

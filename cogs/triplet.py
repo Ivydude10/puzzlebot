@@ -107,7 +107,7 @@ class Triplet(commands.Cog):
             await ctx.send(
                 "**What's the missing link?**\n{}\n{}\n{}".format(*clues)
             )
-            continue_ = await self.wait_for_answer(ctx, word, 15)
+            continue_ = await self.wait_for_answer(ctx, word, timeout=25)
             self.waiting = False
         if self.waiting:
             await ctx.send("Sorry, something went wrong. Please try again.")

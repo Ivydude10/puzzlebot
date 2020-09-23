@@ -28,7 +28,10 @@ TEXT_STRINGS = {
     "Wrong Answer": "Sorry, that is not the right answer.",
     "Wrong Channel": "You cannot perform this action in the current channel. Please use your team channel.",
     "Already Solved": "This puzzle has already been solved!",
+    "Attempting Too Soon": "You are attempting this puzzle again too soon! Please wait another {} seconds.",
 }
+DELAY_AFTER_FAILING = 120
+HUNT_ROLE = "Avatar Hunt"
 
 class PuzzleHunt(commands.Cog):
     """
@@ -142,11 +145,14 @@ class PuzzleHunt(commands.Cog):
         team_info = self._get_team_info(teamid)
         team_channel = ctx.guild.get_channel(team_info['Channel ID'])
         member = ctx.guild.get_member(memberid)
+        role = discord.utils.get(ctx.guild.roles, name=HUNT_ROLE)
+        await member.add_roles(role)
         if team_channel:
             await team_channel.set_permissions(
                 member,
                 read_messages=True,
-                send_messages=True)
+                send_messages=True,
+                read_message_history=True)
         
         await self._send_as_embed(ctx, "Successfully added member @{} to team `{}`.".format(member.display_name, team_info['Team Name']), "You can now access the team channel at #{}.".format(team_channel))
         await team_channel.send("Welcome to team `{}`, <@{}>!".format(team_info['Team Name'], memberid))
@@ -163,7 +169,8 @@ class PuzzleHunt(commands.Cog):
             read_message_history=False,
         )
         await channel.set_permissions(ctx.author, read_messages=True,
-                                                  send_messages=True)
+                                                  send_messages=True,
+                                                  read_message_history=True)
         cursor = self.bot.db_execute("INSERT INTO puzzledb.puzzlehunt_teams (huntid, teamname, teamchannel) VALUES (%s, %s, %s) returning id", (self._huntid, teamname, channel.id))
         teamid = cursor.fetchone()[0]
         await self._add_to_team(ctx, ctx.author.id, teamid)
@@ -196,7 +203,7 @@ class PuzzleHunt(commands.Cog):
                 )
                 embed.add_field(
                     name="-" * 18,
-                    value="Use `?hunt join` to begin!",
+                    value="Not sure what to do? Start with `?hunt help`!",
                     inline=False
                 )
                 
@@ -212,44 +219,44 @@ class PuzzleHunt(commands.Cog):
         """
         embed = discord.Embed(colour=EMBED_COLOUR)
         if self._huntid is not None:
-            embed.set_author(name="`?hunt` Commands:")
+            embed.set_author(name="Puzzle Hunt Commands:")
             embed.add_field(
-                name="join <team name>",
+                name="?hunt join <team name>",
                 value="Join / create a team",
                 inline=True)
             embed.add_field(
-                name="recruit <@ user>",
+                name="?hunt recruit <@ user>",
                 value="Recruit someone into your team",
                 inline=True)
             embed.add_field(
-                name="leave",
+                name="?hunt leave",
                 value="Leave your current team (deletes team if you are the last member)",
                 inline=True)
             embed.add_field(
-                name="puzzles",
+                name="?hunt puzzles",
                 value="View available puzzles",
                 inline=True)
             embed.add_field(
-                name="solve <puzzle id> <your answer>",
+                name="?hunt solve <puzzle id> <your answer>",
                 value="Attempt to solve a puzzle",
                 inline=True)
             embed.add_field(
-                name="team",
+                name="?hunt team",
                 value="View your team info",
                 inline=True)
             embed.add_field(
-                name="leaderboard",
+                name="?hunt leaderboard",
                 value="See the overall leaderboard",
                 inline=True)
             embed.add_field(
-                name="help",
+                name="?hunt help",
                 value="See this list of commands",
                 inline=True)
             embed.add_field(
-                name="faq / errata",
-                value="See frequently asked questions, errata and clarifications.",
+                name="?hunt faq / errata",
+                value="View frequently asked questions, errata and clarifications.",
                 inline=True)
-            embed.set_footer(text="To use any of these commands, send a message beginning with `?hunt` followed by the command in question.")   
+            embed.set_footer(text='Still have questions? Mention our "@Hunt Help" role and we\'ll be over to assist!')
         else:
             embed.set_author(name=TEXT_STRINGS['No Hunt Running'])
         await ctx.send(embed=embed)
@@ -290,6 +297,16 @@ class PuzzleHunt(commands.Cog):
         if puzid in solved:
             await self._send_as_embed(ctx, TEXT_STRINGS['Already Solved'])
             return
+
+        cursor = self.bot.db_execute("SELECT solvetime FROM puzzledb.puzzlehunt_bad_attempts WHERE huntid = %s and teamid = %s and puzzleid = %s;", (self._huntid, team_info['Team ID'], puzid))
+        solvetimes = cursor.fetchall()
+        if solvetimes:
+            solvetimes = [solvetime[0] for solvetime in solvetimes]
+            last_solvetime = sorted(solvetimes)[-1]
+            time_passed = int((datetime.now() - last_solvetime).total_seconds())
+            if time_passed < DELAY_AFTER_FAILING:
+                await self._send_as_embed(ctx, TEXT_STRINGS['Attempting Too Soon'].format(DELAY_AFTER_FAILING - time_passed))
+                return
         
         cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_puzzles where huntid = %s and puzzleid = %s;", (self._huntid, puzid))
         puzzle = cursor.fetchone()
@@ -330,6 +347,9 @@ class PuzzleHunt(commands.Cog):
         if len(self.sanitize_name(teamname)) == 0:
             await self._send_as_embed(ctx, TEXT_STRINGS['Team Name Format'])
             return
+        if "'" in teamname or '"' in teamname:
+            self._send_as_embed(ctx, "Please don't use quotation marks in your team name!")
+            return
         cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_teams where huntid = %s and teamname = %s", (self._huntid, teamname))
         team = cursor.fetchone()
         if team is not None:
@@ -339,7 +359,7 @@ class PuzzleHunt(commands.Cog):
             if app is not None:
                 _, _, _, _, recruited, joined = app
                 if recruited:
-                    await self._add_to_team(ctx, ctx.author.id, teamname)
+                    await self._add_to_team(ctx, ctx.author.id, teamid)
                 else:
                     await self._send_as_embed(ctx, TEXT_STRINGS['Team Exists'])
             else:
@@ -379,7 +399,7 @@ class PuzzleHunt(commands.Cog):
                 await self._send_as_embed(ctx, TEXT_STRINGS['Waiting for Recruitee'])
         else:
             await self._send_as_embed(ctx, TEXT_STRINGS['Waiting for Recruitee'])
-            self.bot.db_execute("INSERT INTO puzzledb.puzzlehunt_team_applications WHERE huntid = %s AND teamid = %s AND solverid = %s", (self._huntid, teamid, recruitedid))
+            self.bot.db_execute("INSERT INTO puzzledb.puzzlehunt_team_applications (huntid, teamid, solverid, recruited, joined) VALUES (%s, %s, %s, TRUE, FALSE)", (self._huntid, teamid, recruitedid))
 
 
     @hunt.command(name='leave')
@@ -399,7 +419,7 @@ class PuzzleHunt(commands.Cog):
         team_channelid = team_info['Channel ID']
         channel = ctx.guild.get_channel(team_channelid)
         await channel.set_permissions(
-            target=ctx.author, read_messages=False, send_messages=False)
+            target=ctx.author, read_messages=False, send_messages=False, read_message_history=False)
 
         if len(members) == 1:
             await self._send_as_embed(ctx, "You are the last member. The team will be deleted.")
@@ -415,33 +435,55 @@ class PuzzleHunt(commands.Cog):
         hunt_info = self._get_hunt_info()
         embed = discord.Embed(colour=EMBED_COLOUR)
         embed.set_author(name=hunt_info['Name'] + " Leaderboard")
+
+        cursor = self.bot.db_execute("""
+        SELECT teamsolves.teamname AS teamname, COALESCE(SUM(puzzles.points), 0) AS total_points, MAX(teamsolves.last_solvetime) AS last_solvetime FROM
+            (SELECT teams.id AS teamid, teams.teamname AS teamname, MAX(solves.solvetime) AS last_solvetime, solves.puzzleid as puzzleid, teams.huntid AS huntid FROM puzzledb.puzzlehunt_teams teams
+            LEFT JOIN puzzledb.puzzlehunt_solves solves
+                ON solves.teamid = teams.id AND solves.huntid = teams.huntid
+                GROUP BY teams.id, solves.puzzleid) teamsolves
+        LEFT JOIN puzzledb.puzzlehunt_puzzles puzzles
+            ON teamsolves.puzzleid = puzzles.puzzleid AND teamsolves.huntid = puzzles.huntid
+            WHERE teamsolves.huntid = %s
+            GROUP BY teamsolves.teamid, teamsolves.teamname
+            ORDER BY total_points DESC, last_solvetime ASC;""",
+            (self._huntid,))
+        teams = cursor.fetchall()
         
-        cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_teams WHERE huntid = %s", (self._huntid,))
-        all_teams = cursor.fetchall()
-        _teaminfos = [
-            self._get_team_info(team[0]) 
-            for team in all_teams
-        ]
-        team_infos = [
-            (
-                team['Team Name'],
-                team['Points'],
-                team['Latest Solve Time']
-            )
-            for team in _teaminfos
-        ]
-        # print(team_infos)
-        team_infos = sorted(team_infos, key=lambda x: [-x[1], x[2]])
+        # cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_teams WHERE huntid = %s", (self._huntid,))
+        # all_teams = cursor.fetchall()
+        # _teaminfos = [
+        #     self._get_team_info(team[0])
+        #     for team in all_teams
+        # ]
+        # team_infos = [
+        #     (
+        #         team['Team Name'],
+        #         team['Points'],
+        #         team['Latest Solve Time']
+        #     )
+        #     for team in _teaminfos
+        # ]
+        # # print(team_infos)
+        # team_infos = sorted(team_infos, key=lambda x: [-x[1], x[2]])
 
-        names = [team[0] for team in team_infos]
+        # names = [team[0] for team in team_infos]
 
-        if len(names) > 0 and team_infos[0][1] > 0: names[0] = "**" + names[0] + ' 🥇**'
-        if len(names) > 1 and team_infos[1][1] > 0: names[1] = "**" + names[1] + ' 🥈**'
-        if len(names) > 2 and team_infos[2][1] > 0: names[2] = "**" + names[2] + ' 🥉**'
+        # if len(names) > 0 and team_infos[0][1] > 0: names[0] = "**" + names[0] + ' 🥇**'
+        # if len(names) > 1 and team_infos[1][1] > 0: names[1] = "**" + names[1] + ' 🥈**'
+        # if len(names) > 2 and team_infos[2][1] > 0: names[2] = "**" + names[2] + ' 🥉**'
 
+        # names = '\n'.join([names])
+        # points = '\n'.join([str(team[1]) for team in team_infos])
+        # times = '\n'.join(["--" if type(team[2]) == int or team[2] is None else datetime.strftime(team[2], "%H:%M:%S") for team in team_infos])
+
+        names = [str(i+1) + '. ' + team[0] for i, team in enumerate(teams)]
+        if len(names) > 0 and teams[0][1]: names[0] = '🥇**' + names[0][2:] + '**'
+        if len(names) > 1 and teams[1][1]: names[1] = '🥈**' + names[1][2:] + '**'
+        if len(names) > 2 and teams[2][1]: names[2] = '🥉**' + names[2][2:] + '**'
         names = '\n'.join(names)
-        points = '\n'.join([str(team[1]) for team in team_infos])
-        times = '\n'.join(["--" if type(team[2]) == int or team[2] is None else datetime.strftime(team[2], "%H:%M:%S") for team in team_infos])
+        points = '\n'.join([str(team[1]) for team in teams])
+        times = '\n'.join(["--" if type(team[2]) == int or team[2] is None else datetime.strftime(team[2], "%d/%m %H:%M") for team in teams])
 
         if names == '':
             names = points = times = "--------"
