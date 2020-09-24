@@ -28,7 +28,7 @@ class Core(Cog):
         try:
             greet_channel = self.bot.CHANNELS[member.guild.id]['GREET']
             await greet_channel.send(
-                """Welcome {0.mention}! Come introduce yourself in #introductions.""".format(member))
+                """Welcome {0.mention}! Come introduce yourself in <#introductions>.""".format(member))
         except:
             raise Exception("No greet channel found!")
 

@@ -29,9 +29,20 @@ TEXT_STRINGS = {
     "Wrong Channel": "You cannot perform this action in the current channel. Please use your team channel.",
     "Already Solved": "This puzzle has already been solved!",
     "Attempting Too Soon": "You are attempting this puzzle again too soon! Please wait another {} seconds.",
+    "Hunt Not Started": "You cannot perform this action since the hunt has not officially started.",
+    "Start Hunt Intro": "Long ago, the four nations lived together in harmony. Then, everything changed when the fifth element was discovered. None could comprehend it, yet some tried to abuse its power. It was up to Aang The Avatar to overcome its mystery and return the four nations to its old glory.\n\n*Welcome to The Last Puzzlehunt.*",
+    "Finish Hunt Outro": "Thanks to you, Aang realises that the ability of puzzlebending was within all of us, all along. Harmony returns to the four, nay, five nations. Just as Aang is the master of all elements, you are now immortalised as the master of the fifth element.\n\nThanks for joining **Avatar: The Last Puzzlehunt**!",
 }
-DELAY_AFTER_FAILING = 120
+DELAY_AFTER_FAILING = 60
 HUNT_ROLE = "Avatar Hunt"
+
+def strfdelta(tdelta):
+    hrs, rem = divmod(tdelta, 3600)
+    mins, secs = divmod(rem, 60)
+    f = ""
+    if hrs:
+        f = "%02d hours, " % (hrs)
+    return f + "%02d minutes, %02d seconds" % (mins, secs)
 
 class PuzzleHunt(commands.Cog):
     """
@@ -43,10 +54,11 @@ class PuzzleHunt(commands.Cog):
         self._huntid = None
         self._VARIABLES = {
             "Hide locked puzzles": True,
-            "Non-meta same link": True
+            "Non-meta same link": True,
+            "Solving outside hunt duration": False
         }
 
-        self._huntid = 'arcade'
+        self._huntid = 'avatar'
     
 
     @commands.Cog.listener()
@@ -95,7 +107,7 @@ class PuzzleHunt(commands.Cog):
         cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_solvers WHERE huntid = %s AND id = %s", (self._huntid, memberid))
         matching_solver = cursor.fetchone()
         if matching_solver:
-            _, teamid, _ = matching_solver
+            _, _, teamid, _ = matching_solver
         else:
             return None
         return self._get_team_info(teamid)
@@ -112,33 +124,31 @@ class PuzzleHunt(commands.Cog):
     def _get_team_info(self, teamid):
         if teamid is None or self._huntid is None:
             return None
-        cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_teams WHERE huntid = %s AND id = %s", (self._huntid, teamid))
+        cursor = self.bot.db_execute(
+            """
+            SELECT teamsolves.teamid AS teamid, teamsolves.teamname AS teamname, MAX(teamsolves.last_solvetime) AS last_solvetime, COALESCE(SUM(puzzles.points), 0) AS total_points, teamsolves.teamchannel AS teamchannel FROM
+                (SELECT teams.id AS teamid, teams.teamname AS teamname, MAX(solves.solvetime) AS last_solvetime, solves.puzzleid as puzzleid, teams.huntid AS huntid, teams.teamchannel AS teamchannel FROM puzzledb.puzzlehunt_teams teams
+                LEFT JOIN puzzledb.puzzlehunt_solves solves
+                    ON solves.teamid = teams.id AND solves.huntid = teams.huntid
+                    GROUP BY teams.id, solves.puzzleid) teamsolves
+            LEFT JOIN puzzledb.puzzlehunt_puzzles puzzles
+            ON teamsolves.puzzleid = puzzles.puzzleid AND teamsolves.huntid = puzzles.huntid
+            WHERE teamsolves.huntid = %s and teamsolves.teamid = %s GROUP BY teamsolves.teamid, teamsolves.teamname, teamsolves.teamchannel;
+            """,
+            (self._huntid, teamid)
+        )
         matching_team = cursor.fetchone()
         if matching_team:
-            teamid, huntid, teamname, teamchannel = matching_team
-            cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_solves WHERE huntid = %s AND teamid = %s", (self._huntid, teamid))
-            matching_solves = cursor.fetchall()
-            
-            last_solve = None
-            for solve in matching_solves:
-                _, _, _, solvetime, puzzleid = solve
-                if last_solve is None or solvetime > last_solve:
-                    last_solve = solvetime
-            
-            cursor = self.bot.db_execute("SELECT SUM(points) FROM puzzledb.puzzlehunt_puzzles WHERE huntid = %s AND puzzleid IN (SELECT puzzleid FROM puzzledb.puzzlehunt_solves WHERE huntid = %s AND teamid = %s)", (self._huntid, self._huntid, teamid))
-            points = cursor.fetchone()[0]
-            if points is None:
-                points = 0
+            teamid, teamname, last_solve, total_points, teamchannel = matching_team
 
             return {
                 'Team ID': teamid,
                 'Team Name': teamname,
                 'Channel ID': teamchannel,
-                'Points': points,
+                'Points': total_points,
                 'Latest Solve Time': last_solve
             }
-        else:
-            return None
+        return None
 
     async def _add_to_team(self, ctx, memberid, teamid):
         self.bot.db_execute("INSERT INTO puzzledb.puzzlehunt_solvers (id, huntid, teamid) VALUES (%s, %s, %s)", (memberid, self._huntid, teamid))
@@ -173,6 +183,9 @@ class PuzzleHunt(commands.Cog):
                                                   read_message_history=True)
         cursor = self.bot.db_execute("INSERT INTO puzzledb.puzzlehunt_teams (huntid, teamname, teamchannel) VALUES (%s, %s, %s) returning id", (self._huntid, teamname, channel.id))
         teamid = cursor.fetchone()[0]
+
+        await self._send_as_embed(channel, "Water. Earth. Fire. Air. ... Puzzle.", TEXT_STRINGS['Start Hunt Intro'])
+
         await self._add_to_team(ctx, ctx.author.id, teamid)
 
     """
@@ -185,7 +198,8 @@ class PuzzleHunt(commands.Cog):
             embed.set_author(name="Currently Running Puzzle Hunt:")
             hunt_info = self._get_hunt_info(self._huntid)
             if hunt_info is not None:
-                remaining = hunt_info['End time'] - datetime.now()
+                remaining = (hunt_info['End time'] - datetime.now()).total_seconds()
+                to_go = (hunt_info['Start time'] - datetime.now()).total_seconds()
                 embed.add_field(
                     name="Name",
                     value=hunt_info['Name'],
@@ -197,8 +211,8 @@ class PuzzleHunt(commands.Cog):
                     inline=False
                 )
                 embed.add_field(
-                    name="Time remaining",
-                    value="N.A." if remaining.total_seconds() < 0 else str(remaining),
+                    name="Starts in" if to_go > 0 else "Time remaining",
+                    value=strfdelta(to_go) if to_go > 0 else strfdelta(remaining) if remaining > 0 else "N.A.",
                     inline=False
                 )
                 embed.add_field(
@@ -217,48 +231,49 @@ class PuzzleHunt(commands.Cog):
         """
         Get an explanation of how the hunt function of the bot works.
         """
-        embed = discord.Embed(colour=EMBED_COLOUR)
-        if self._huntid is not None:
-            embed.set_author(name="Puzzle Hunt Commands:")
-            embed.add_field(
-                name="?hunt join <team name>",
-                value="Join / create a team",
-                inline=True)
-            embed.add_field(
-                name="?hunt recruit <@ user>",
-                value="Recruit someone into your team",
-                inline=True)
-            embed.add_field(
-                name="?hunt leave",
-                value="Leave your current team (deletes team if you are the last member)",
-                inline=True)
-            embed.add_field(
-                name="?hunt puzzles",
-                value="View available puzzles",
-                inline=True)
-            embed.add_field(
-                name="?hunt solve <puzzle id> <your answer>",
-                value="Attempt to solve a puzzle",
-                inline=True)
-            embed.add_field(
-                name="?hunt team",
-                value="View your team info",
-                inline=True)
-            embed.add_field(
-                name="?hunt leaderboard",
-                value="See the overall leaderboard",
-                inline=True)
-            embed.add_field(
-                name="?hunt help",
-                value="See this list of commands",
-                inline=True)
-            embed.add_field(
-                name="?hunt faq / errata",
-                value="View frequently asked questions, errata and clarifications.",
-                inline=True)
-            embed.set_footer(text='Still have questions? Mention our "@Hunt Help" role and we\'ll be over to assist!')
-        else:
-            embed.set_author(name=TEXT_STRINGS['No Hunt Running'])
+        async with ctx.typing(): 
+            embed = discord.Embed(colour=EMBED_COLOUR)
+            if self._huntid is not None:
+                embed.set_author(name="Puzzle Hunt Commands:")
+                embed.add_field(
+                    name="?hunt join <team name>",
+                    value="Join / create a team",
+                    inline=True)
+                embed.add_field(
+                    name="?hunt recruit <@ user>",
+                    value="Recruit someone into your team",
+                    inline=True)
+                embed.add_field(
+                    name="?hunt leave",
+                    value="Leave your current team (deletes team if you are the last member)",
+                    inline=True)
+                embed.add_field(
+                    name="?hunt puzzles",
+                    value="View available puzzles",
+                    inline=True)
+                embed.add_field(
+                    name="?hunt solve <puzzle id> <your answer>",
+                    value="Attempt to solve a puzzle",
+                    inline=True)
+                embed.add_field(
+                    name="?hunt team",
+                    value="View your team info",
+                    inline=True)
+                embed.add_field(
+                    name="?hunt leaderboard",
+                    value="See the overall leaderboard",
+                    inline=True)
+                embed.add_field(
+                    name="?hunt help",
+                    value="See this list of commands",
+                    inline=True)
+                embed.add_field(
+                    name="?hunt faq / errata",
+                    value="View frequently asked questions, errata and clarifications.",
+                    inline=True)
+                embed.set_footer(text='Still have questions? Mention our "@Hunt Help" role and we\'ll be over to assist!')
+            else:
+                embed.set_author(name=TEXT_STRINGS['No Hunt Running'])
         await ctx.send(embed=embed)
         
     
@@ -279,7 +294,14 @@ class PuzzleHunt(commands.Cog):
         if self._huntid is None:
             await self._send_as_embed(ctx, TEXT_STRINGS['No Hunt Running'])
             return
-        team_info = self._get_team_info_from_member(ctx.author.id)
+        async with ctx.typing(): 
+            hunt_info = self._get_hunt_info()
+            
+        if hunt_info['Start time'] > datetime.now() and not self._VARIABLES['Solving outside hunt duration']:
+            await self._send_as_embed(ctx, TEXT_STRINGS['Hunt Not Started'])
+            return
+        async with ctx.typing(): 
+            team_info = self._get_team_info_from_member(ctx.author.id)
         if team_info is None:
             await self._send_as_embed(ctx, TEXT_STRINGS['Not in a Team'])
             return
@@ -291,15 +313,17 @@ class PuzzleHunt(commands.Cog):
             await self._send_as_embed(ctx, TEXT_STRINGS['Answer Clarification'])
             return
 
-        cursor = self.bot.db_execute("SELECT puzzleid FROM puzzledb.puzzlehunt_solves WHERE huntid = %s and teamid = %s;", (self._huntid, team_info['Team ID']))
-        solves = cursor.fetchall()
+        async with ctx.typing(): 
+            cursor = self.bot.db_execute("SELECT puzzleid FROM puzzledb.puzzlehunt_solves WHERE huntid = %s and teamid = %s;", (self._huntid, team_info['Team ID']))
+            solves = cursor.fetchall()
         solved = [solve[0] for solve in solves]
         if puzid in solved:
             await self._send_as_embed(ctx, TEXT_STRINGS['Already Solved'])
             return
 
-        cursor = self.bot.db_execute("SELECT solvetime FROM puzzledb.puzzlehunt_bad_attempts WHERE huntid = %s and teamid = %s and puzzleid = %s;", (self._huntid, team_info['Team ID'], puzid))
-        solvetimes = cursor.fetchall()
+        async with ctx.typing(): 
+            cursor = self.bot.db_execute("SELECT solvetime FROM puzzledb.puzzlehunt_bad_attempts WHERE huntid = %s and teamid = %s and puzzleid = %s;", (self._huntid, team_info['Team ID'], puzid))
+            solvetimes = cursor.fetchall()
         if solvetimes:
             solvetimes = [solvetime[0] for solvetime in solvetimes]
             last_solvetime = sorted(solvetimes)[-1]
@@ -307,21 +331,25 @@ class PuzzleHunt(commands.Cog):
             if time_passed < DELAY_AFTER_FAILING:
                 await self._send_as_embed(ctx, TEXT_STRINGS['Attempting Too Soon'].format(DELAY_AFTER_FAILING - time_passed))
                 return
-        
-        cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_puzzles where huntid = %s and puzzleid = %s;", (self._huntid, puzid))
-        puzzle = cursor.fetchone()
-        if not puzzle:
-            cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_puzzles where huntid = %s and UPPER(name) = UPPER(%s);", (self._huntid, puzid))
+            
+        async with ctx.typing(): 
+            cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_puzzles where huntid = %s and puzzleid = %s;", (self._huntid, puzid))
             puzzle = cursor.fetchone()
-            if not puzzle:
-                await self._send_as_embed(ctx, TEXT_STRINGS['Answer Clarification'])
-                return
+        if not puzzle:
+            async with ctx.typing(): 
+                cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_puzzles where huntid = %s and UPPER(name) = UPPER(%s);", (self._huntid, puzid))
+                puzzle = cursor.fetchone()
+        if not puzzle:
+            await self._send_as_embed(ctx, TEXT_STRINGS['Answer Clarification'])
+            return
         _, _, _, name, relatedlink, points, requiredpoints, answer = puzzle
         attempt = ''.join(attempt).lower().replace(' ', '')
 
         if attempt == answer:
             # Correct solve
             await self._send_as_embed(ctx, TEXT_STRINGS['Correct Answer'].format(points))
+            if puzid == 'META':
+                await self._send_as_embed(ctx, "Congratulations!", TEXT_STRINGS['Finish Hunt Outro'])
             self.bot.db_execute("INSERT INTO puzzledb.puzzlehunt_solves (huntid, puzzleid, solvetime, teamid) VALUES (%s, %s, %s, %s);", (self._huntid, puzid, datetime.now(), team_info['Team ID']))
         else:
             # Wrong
@@ -330,7 +358,7 @@ class PuzzleHunt(commands.Cog):
                 self.bot.db_execute("INSERT INTO puzzledb.puzzlehunt_bad_attempts (huntid, puzzleid, solvetime, teamid, attempt) VALUES (%s, %s, %s, %s, %s);", (self._huntid, puzid, datetime.now(), team_info['Team ID'], attempt))
 
     @hunt.command(name='join')
-    async def join(self, ctx, *, teamname):
+    async def join(self, ctx, *, teamname=""):
         if self._huntid is None:
             await self._send_as_embed(ctx, TEXT_STRINGS['No Hunt Running'])
             return
@@ -347,9 +375,9 @@ class PuzzleHunt(commands.Cog):
         if len(self.sanitize_name(teamname)) == 0:
             await self._send_as_embed(ctx, TEXT_STRINGS['Team Name Format'])
             return
-        if "'" in teamname or '"' in teamname:
-            self._send_as_embed(ctx, "Please don't use quotation marks in your team name!")
-            return
+        # if "'" in teamname or '"' in teamname:
+        #     await self._send_as_embed(ctx, "Illegal character(s) in your team name!")
+        #     return
         cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_teams where huntid = %s and teamname = %s", (self._huntid, teamname))
         team = cursor.fetchone()
         if team is not None:
@@ -407,16 +435,18 @@ class PuzzleHunt(commands.Cog):
         if self._huntid is None:
             await self._send_as_embed(ctx, TEXT_STRINGS['No Hunt Running'])
             return
-        team_info = self._get_team_info_from_member(ctx.author.id)
+        async with ctx.typing(): 
+            team_info = self._get_team_info_from_member(ctx.author.id)
         if team_info is None:
             await self._send_as_embed(ctx, TEXT_STRINGS['Not in a Team'])
             return
         teamid = team_info['Team ID']
-        cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_solvers WHERE huntid = %s AND teamid = %s", (self._huntid, teamid))
-        members = cursor.fetchall()
-        
-        self.bot.db_execute("DELETE FROM puzzledb.puzzlehunt_solvers WHERE huntid = %s AND teamid = %s AND id = %s", (self._huntid, teamid, ctx.author.id))
-        team_channelid = team_info['Channel ID']
+        async with ctx.typing(): 
+            cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_solvers WHERE huntid = %s AND teamid = %s", (self._huntid, teamid))
+            members = cursor.fetchall()
+            
+            self.bot.db_execute("DELETE FROM puzzledb.puzzlehunt_solvers WHERE huntid = %s AND teamid = %s AND id = %s", (self._huntid, teamid, ctx.author.id))
+            team_channelid = team_info['Channel ID']
         channel = ctx.guild.get_channel(team_channelid)
         await channel.set_permissions(
             target=ctx.author, read_messages=False, send_messages=False, read_message_history=False)
@@ -432,50 +462,24 @@ class PuzzleHunt(commands.Cog):
             await self._send_as_embed(ctx, TEXT_STRINGS['No Hunt Running'])
             return
 
-        hunt_info = self._get_hunt_info()
-        embed = discord.Embed(colour=EMBED_COLOUR)
-        embed.set_author(name=hunt_info['Name'] + " Leaderboard")
+        async with ctx.typing(): 
+            hunt_info = self._get_hunt_info()
+            embed = discord.Embed(colour=EMBED_COLOUR)
+            embed.set_author(name=hunt_info['Name'] + " Leaderboard")
 
-        cursor = self.bot.db_execute("""
-        SELECT teamsolves.teamname AS teamname, COALESCE(SUM(puzzles.points), 0) AS total_points, MAX(teamsolves.last_solvetime) AS last_solvetime FROM
-            (SELECT teams.id AS teamid, teams.teamname AS teamname, MAX(solves.solvetime) AS last_solvetime, solves.puzzleid as puzzleid, teams.huntid AS huntid FROM puzzledb.puzzlehunt_teams teams
-            LEFT JOIN puzzledb.puzzlehunt_solves solves
-                ON solves.teamid = teams.id AND solves.huntid = teams.huntid
-                GROUP BY teams.id, solves.puzzleid) teamsolves
-        LEFT JOIN puzzledb.puzzlehunt_puzzles puzzles
-            ON teamsolves.puzzleid = puzzles.puzzleid AND teamsolves.huntid = puzzles.huntid
-            WHERE teamsolves.huntid = %s
-            GROUP BY teamsolves.teamid, teamsolves.teamname
-            ORDER BY total_points DESC, last_solvetime ASC;""",
-            (self._huntid,))
-        teams = cursor.fetchall()
-        
-        # cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_teams WHERE huntid = %s", (self._huntid,))
-        # all_teams = cursor.fetchall()
-        # _teaminfos = [
-        #     self._get_team_info(team[0])
-        #     for team in all_teams
-        # ]
-        # team_infos = [
-        #     (
-        #         team['Team Name'],
-        #         team['Points'],
-        #         team['Latest Solve Time']
-        #     )
-        #     for team in _teaminfos
-        # ]
-        # # print(team_infos)
-        # team_infos = sorted(team_infos, key=lambda x: [-x[1], x[2]])
-
-        # names = [team[0] for team in team_infos]
-
-        # if len(names) > 0 and team_infos[0][1] > 0: names[0] = "**" + names[0] + ' 🥇**'
-        # if len(names) > 1 and team_infos[1][1] > 0: names[1] = "**" + names[1] + ' 🥈**'
-        # if len(names) > 2 and team_infos[2][1] > 0: names[2] = "**" + names[2] + ' 🥉**'
-
-        # names = '\n'.join([names])
-        # points = '\n'.join([str(team[1]) for team in team_infos])
-        # times = '\n'.join(["--" if type(team[2]) == int or team[2] is None else datetime.strftime(team[2], "%H:%M:%S") for team in team_infos])
+            cursor = self.bot.db_execute("""
+            SELECT teamsolves.teamname AS teamname, COALESCE(SUM(puzzles.points), 0) AS total_points, MAX(teamsolves.last_solvetime) AS last_solvetime FROM
+                (SELECT teams.id AS teamid, teams.teamname AS teamname, MAX(solves.solvetime) AS last_solvetime, solves.puzzleid as puzzleid, teams.huntid AS huntid FROM puzzledb.puzzlehunt_teams teams
+                LEFT JOIN puzzledb.puzzlehunt_solves solves
+                    ON solves.teamid = teams.id AND solves.huntid = teams.huntid
+                    GROUP BY teams.id, solves.puzzleid) teamsolves
+            LEFT JOIN puzzledb.puzzlehunt_puzzles puzzles
+                ON teamsolves.puzzleid = puzzles.puzzleid AND teamsolves.huntid = puzzles.huntid
+                WHERE teamsolves.huntid = %s
+                GROUP BY teamsolves.teamid, teamsolves.teamname
+                ORDER BY total_points DESC, last_solvetime ASC;""",
+                (self._huntid,))
+            teams = cursor.fetchall()
 
         names = [str(i+1) + '. ' + team[0] for i, team in enumerate(teams)]
         if len(names) > 0 and teams[0][1]: names[0] = '🥇**' + names[0][2:] + '**'
@@ -500,9 +504,10 @@ class PuzzleHunt(commands.Cog):
             await self._send_as_embed(ctx, TEXT_STRINGS['No Hunt Running'])
             return
         
-        cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_faqs WHERE huntid = %s;", (self._huntid,))
-        faqs = cursor.fetchall()
-        
+        async with ctx.typing():  
+            cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_faqs WHERE huntid = %s;", (self._huntid,))
+            faqs = cursor.fetchall()
+            
         questions = []
         errata = []
 
@@ -516,10 +521,9 @@ class PuzzleHunt(commands.Cog):
         
         embed = discord.Embed(colour=EMBED_COLOUR)
         
-        embed.add_field(name='FAQ', value='\n'.join(questions) if questions else '--', inline=False)
-        embed.add_field(name='Errata', value='\n'.join(errata) if errata else '--', inline=False)
+        embed.add_field(name='FAQ', value='\n'.join(questions) if questions else 'No FAQ available.', inline=False)
+        embed.add_field(name='Errata', value='\n'.join(errata) if errata else 'No errata has been given.', inline=False)
         await ctx.send(embed=embed)
-
 
 
     @hunt.command(name="team", aliases=['myteam', 'viewteam', 'teaminfo'])
@@ -527,36 +531,25 @@ class PuzzleHunt(commands.Cog):
         if self._huntid is None:
             await self._send_as_embed(ctx, TEXT_STRINGS['No Hunt Running'])
             return
-        team_info = self._get_team_info_from_member(ctx.author.id)
-        if team_info is None:
-            await self._send_as_embed(ctx, TEXT_STRINGS['Not in a Team'])
-            return
-        
-        cursor = self.bot.db_execute(
-            """
-                SELECT COUNT(points), SUM(points) AS total_points, MAX(solvetime) FROM puzzledb.puzzlehunt_solves solves
-                    LEFT JOIN puzzledb.puzzlehunt_puzzles puzzles
-                    ON solves.puzzleid = puzzles.puzzleid AND solves.huntid = puzzles.huntid
-                    WHERE teamid = %s and solves.huntid = %s
-            """,
-            (team_info['Team ID'], self._huntid)
-        )
-        puzzles_solved, points, _ = cursor.fetchone()
+        async with ctx.typing():
+            team_info = self._get_team_info_from_member(ctx.author.id)
+            if team_info is None:
+                await self._send_as_embed(ctx, TEXT_STRINGS['Not in a Team'])
+                return
 
-        cursor = self.bot.db_execute(
-            "SELECT * FROM puzzledb.puzzlehunt_solvers WHERE huntid = %s and teamid = %s",
-            (self._huntid, team_info['Team ID'])
-        )
-        
-        members = cursor.fetchall()
-        members = [ctx.guild.get_member(mem[0]).display_name for mem in members]
+            cursor = self.bot.db_execute(
+                "SELECT * FROM puzzledb.puzzlehunt_solvers WHERE huntid = %s and teamid = %s",
+                (self._huntid, team_info['Team ID'])
+            )
+            
+            members = cursor.fetchall()
+        members = [ctx.guild.get_member(mem[1]).display_name for mem in members]
 
         embed = discord.Embed(colour=EMBED_COLOUR)
         embed.set_author(name="Your Team:")
         
         embed.add_field(name='Name', value=team_info['Team Name'], inline=False)
-        embed.add_field(name='Puzzles solved', value=str(puzzles_solved), inline=False)
-        embed.add_field(name='Total points', value=points, inline=False)
+        embed.add_field(name='Total points', value=team_info['Points'], inline=False)
         embed.add_field(name='Members', value='\n'.join(members), inline=False)
         await ctx.send(embed=embed)
 
@@ -567,22 +560,30 @@ class PuzzleHunt(commands.Cog):
             await self._send_as_embed(ctx, TEXT_STRINGS['No Hunt Running'])
             return
 
-        hunt_info = self._get_hunt_info()
+        async with ctx.typing():
+            hunt_info = self._get_hunt_info()
+        
+        admin_role = discord.utils.get(ctx.guild.roles, name="Bot Maintainer")
+        if hunt_info['Start time'] > datetime.now() and not self._VARIABLES['Solving outside hunt duration'] and not admin_role in ctx.author.roles:
+            await self._send_as_embed(ctx, TEXT_STRINGS['Hunt Not Started'])
+            return
 
-        team_info = self._get_team_info_from_member(ctx.author.id)
+        async with ctx.typing():
+            team_info = self._get_team_info_from_member(ctx.author.id)
         if team_info is None:
             await self._send_as_embed(ctx, TEXT_STRINGS['Not in a Team'])
             return
-
+        
         if ctx.message.channel != ctx.guild.get_channel(team_info['Channel ID']):
             await self._send_as_embed(ctx, TEXT_STRINGS['Wrong Channel'])
             return
 
-        cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_puzzles WHERE huntid = %s;", (self._huntid,))
-        puzzles = cursor.fetchall()
-        cursor = self.bot.db_execute("SELECT puzzleid FROM puzzledb.puzzlehunt_solves WHERE huntid = %s and teamid = %s;", (self._huntid, team_info['Team ID']))
-        solves = cursor.fetchall()
-        solves = [solve[0] for solve in solves]
+        async with ctx.typing():
+            cursor = self.bot.db_execute("SELECT * FROM puzzledb.puzzlehunt_puzzles WHERE huntid = %s;", (self._huntid,))
+            puzzles = cursor.fetchall()
+            cursor = self.bot.db_execute("SELECT puzzleid FROM puzzledb.puzzlehunt_solves WHERE huntid = %s and teamid = %s;", (self._huntid, team_info['Team ID']))
+            solves = cursor.fetchall()
+            solves = [solve[0] for solve in solves]
 
         puzzleids = []
         names = []
@@ -615,7 +616,6 @@ class PuzzleHunt(commands.Cog):
             embed.set_footer(text='All non-meta puzzles use the same link. You only need to open it once.')
 
         await ctx.send(embed=embed)
-        return
 
     """
     MAINTAINER FUNCTIONS
@@ -682,7 +682,8 @@ class PuzzleHunt(commands.Cog):
             await self._send_as_embed(ctx, "Need to provide team name!")
             return
         # teamname = ' '.join(teamname)
-        team_info = self._get_team_info_from_name(teamname)
+        async with ctx.typing(): 
+            team_info = self._get_team_info_from_name(teamname)
         if team_info is None:
             await self._send_as_embed(ctx, "No such team!")
             return
@@ -691,10 +692,11 @@ class PuzzleHunt(commands.Cog):
         except:
             pass
 
-        self.bot.db_execute("DELETE FROM puzzledb.puzzlehunt_team_applications WHERE huntid = %s AND teamid = %s", (self._huntid, team_info['Team ID']))
-        self.bot.db_execute("DELETE FROM puzzledb.puzzlehunt_solvers WHERE huntid = %s AND teamid = %s", (self._huntid, team_info['Team ID']))
-        self.bot.db_execute("DELETE FROM puzzledb.puzzlehunt_solves WHERE huntid = %s AND teamid = %s", (self._huntid, team_info['Team ID']))
-        self.bot.db_execute("DELETE FROM puzzledb.puzzlehunt_teams WHERE huntid = %s AND id = %s", (self._huntid, team_info['Team ID']))
+        async with ctx.typing(): 
+            self.bot.db_execute("DELETE FROM puzzledb.puzzlehunt_team_applications WHERE huntid = %s AND teamid = %s", (self._huntid, team_info['Team ID']))
+            self.bot.db_execute("DELETE FROM puzzledb.puzzlehunt_solvers WHERE huntid = %s AND teamid = %s", (self._huntid, team_info['Team ID']))
+            self.bot.db_execute("DELETE FROM puzzledb.puzzlehunt_solves WHERE huntid = %s AND teamid = %s", (self._huntid, team_info['Team ID']))
+            self.bot.db_execute("DELETE FROM puzzledb.puzzlehunt_teams WHERE huntid = %s AND id = %s", (self._huntid, team_info['Team ID']))
         await self._send_as_embed(ctx, "Team has been deleted.")
 
 
