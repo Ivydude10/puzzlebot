@@ -217,7 +217,9 @@ class Trivia(Cog):
             self._last_response = time.time()
             guess = message.content.lower()
             guess = normalize_smartquotes(guess)
+            guess = ''.join([c for c in guess if c.isalnum()])
             for answer in answers:
+                answer = ''.join([c for c in answer if c.isalnum()])
                 if " " in answer and answer in guess:
                     # Exact matching, issue #331
                     return True

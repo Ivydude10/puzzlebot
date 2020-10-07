@@ -94,5 +94,16 @@ class Core(Cog):
             await ctx.send('Failed.')
             await self.bot.log(str(e))
 
+    @has_any_role("Bot Maintainer")
+    @command(name="say")
+    async def mouthpiece(self, ctx, channel: str, *, sentence):
+        if channel.startswith('<'):
+            channel = channel[2:-1]
+        if channel.isnumeric():
+            channel = ctx.guild.get_channel(int(channel))
+            await channel.send(sentence)
+
+
+
 def setup(bot):
     bot.add_cog(Core(bot))
