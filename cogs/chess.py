@@ -596,6 +596,7 @@ class Chess(Cog):
         if self._current_game is None:
             self._current_game = [Position(initial, 0, (True,True), (True,True), 0, 0)]
             await self._send_board(ctx)
+            await self._send_as_embed(ctx, "Your turn.")
         else:
             await self._send_as_embed(ctx, "A game is already in progress!")
             return
@@ -670,7 +671,7 @@ class Chess(Cog):
 
         if self._current_game[-1].score <= -MATE_LOWER:
             await self._send_as_embed(ctx, "You win!")
-            self.current_game = None
+            self._current_game = None
             return
 
         with ctx.typing():
