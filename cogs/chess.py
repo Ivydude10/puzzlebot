@@ -634,7 +634,7 @@ class Chess(Cog):
             name=f"{self.bot.BOT_PREFIX}chess difficulty <n>",
             value="Set bot difficulty (n = seconds to think per move)",
             inline=True)
-        embed.set_footer(text=f'Note: This bot doesn\'t understand checkmate; you have to take the king. PvP Chess coming soon. Current difficulty: {self.thinking_time}')
+        embed.set_footer(text=f'Note: This bot doesn\'t understand checkmate; you have to take the king. Current difficulty: {self.thinking_time}')
         await ctx.send(embed=embed)
 
     @chess.command(name="difficulty")
