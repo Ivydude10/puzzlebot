@@ -17,6 +17,7 @@ from cogs.trivia import Trivia
 from cogs.triplet import Triplet
 from cogs.layton import Layton
 from cogs.cryptic import Cryptic
+from cogs.chess import Chess
 
 load_dotenv()
 
@@ -62,6 +63,7 @@ class PazuChan(Bot):
         self.add_cog(Triplet(self))
         self.add_cog(Layton(self))
         self.add_cog(Cryptic(self))
+        self.add_cog(Chess(self))
 
 
     """
