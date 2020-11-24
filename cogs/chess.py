@@ -786,6 +786,7 @@ class Chess(Cog):
                     break
         else:
             await self.invalid_move(ctx)
+            self._thonking = False
             return
 
         game = self._current_game[-1]
