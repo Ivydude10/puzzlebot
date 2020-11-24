@@ -467,10 +467,11 @@ from discord.ext.commands import has_any_role, Cog, group
 
 def new_embed():
     return discord.Embed(
-        colour=discord.Colour.green()
+        colour=discord.Colour.blue()
     )
 
-CHESS_TRANSLATION = {
+
+CHESS_EMOTES = {
     'K': '<:wK:780707162317914125>',
     'Q': '<:wQ:780707162514915359>',
     'B': '<:wB:780707162333904898>',
@@ -501,6 +502,43 @@ CHESS_TRANSLATION = {
     ' ': ''
 }
 
+ALT_CHESS_EMOTES = {
+    'k': '<:wK:780707162317914125>',
+    'q': '<:wQ:780707162514915359>',
+    'b': '<:wB:780707162333904898>',
+    'n': '<:wN:780707162732888094>',
+    'r': '<:wR:780707162761986050>',
+    'p': '<:wp:780707162641006592>',
+    'K': '<:bK:780707162544275456>',
+    'Q': '<:bQ:780707162406125569>',
+    'B': '<:bB:780707162422509600>',
+    'N': '<:bN:780707162342293565>',
+    'R': '<:bR:780707162720305173>',
+    'P': '<:bp:780707162615447552>',
+    '.': '<:blank:780707162363920455>',
+    # 'k': '<:wK:780677439898124293>',
+    # 'q': '<:wQ:780677439939543052>',
+    # 'b': '<:wB:780677440024215582>',
+    # 'n': '<:wN:780677440052920320>',
+    # 'r': '<:wR:780677439700598785>',
+    # 'p': '<:wp:780677440032735252>',
+    # 'K': '<:bK:780677439973621790>',
+    # 'Q': '<:bQ:780677439600852993>',
+    # 'B': '<:bB:780677439566118933>',
+    # 'N': '<:bN:780677439659442188>',
+    # 'R': '<:bR:780677439667175435>',
+    # 'P': '<:bp:780677439906775051>',
+    # '.': '<:empty:780677439620644915>',
+    '\n': '\n',
+    ' ': ''
+}
+
+
+def flip_move(move):
+    row = 'abcdefgh'
+    col = '12345678'
+    return row[7-row.index(move[0])] + col[7-col.index(move[1])]
+
 
 class Chess(Cog):
     """
@@ -509,11 +547,13 @@ class Chess(Cog):
     def __init__(self, bot):
         self.bot = bot
         self._searcher = Searcher()
-        self._current_game = None
+        self._thonking = False
         self.thinking_time = 1
+        self.reset_game()
         self.move_matchers = [
-            ('([a-h][1-8])'*2, 0),
-            ('([KkQqRrBbNn]?)([a-h][1-8])', 1)
+            ('([a-h][1-8])' * 2, 0),
+            ('([KkQqRrBbNn]?)([a-h][1-8])', 1),
+            ('([KkQqRrBbNn]?)' + '([a-h][1-8])' * 2, 2)
         ]
 
     @Cog.listener()
@@ -535,20 +575,41 @@ class Chess(Cog):
         if board is None:
             board = self._current_game[-1]
 
-        board = board.board.strip()
-        final_str = ":regional_indicator_a::regional_indicator_b::regional_indicator_c::regional_indicator_d::regional_indicator_e::regional_indicator_f::regional_indicator_g::regional_indicator_h:\n"
+        emote_dict = CHESS_EMOTES
+        if self._mode == 'PlayerW':
+            board = board.board.strip()
+        elif self._mode == 'PlayerB':
+            emote_dict = ALT_CHESS_EMOTES
+            board = board.board.strip()
+        else:
+            if not self._turn_is_white:
+                board = board.rotate().board.strip()
+            else:
+                board = board.board.strip()
+
+        
+        final_str = ":regional_indicator_h::regional_indicator_g::regional_indicator_f::regional_indicator_e::regional_indicator_d::regional_indicator_c::regional_indicator_b::regional_indicator_a:\n"if self._mode == 'PlayerB' else ":regional_indicator_a::regional_indicator_b::regional_indicator_c::regional_indicator_d::regional_indicator_e::regional_indicator_f::regional_indicator_g::regional_indicator_h:\n"
         numbers = [":one:", ":two:", ":three:", ":four:", ":five:", ":six:", ":seven:", ":eight:"]
+        if self._mode == 'PlayerB':
+            numbers = list(reversed(numbers))
         i = 0
         for c in board:
             if c == '\n':
                 final_str += numbers[7-i]
                 i += 1
-            final_str += CHESS_TRANSLATION[c]
+            final_str += emote_dict[c]
         final_str += numbers[7-i]
         await ctx.send(final_str)
         
     async def _send_reversed_board(self, ctx):
         await self._send_board(ctx, self._current_game[-1].rotate())
+
+    def reset_game(self):
+        self._current_game = None
+        self._joining_msg = None
+        self._mode = None
+        self._turn_is_white = True
+        self._participants = {'Black': set(), 'White': set()}
 
     @group(name="chess", invoke_without_command=True)
     async def chess(self, ctx):
@@ -573,7 +634,7 @@ class Chess(Cog):
             name=f"{self.bot.BOT_PREFIX}chess difficulty <n>",
             value="Set bot difficulty (n = seconds to think per move)",
             inline=True)
-        embed.set_footer(text='PvP Chess coming soon.')
+        embed.set_footer(text=f'Note: This bot doesn\'t understand checkmate; you have to take the king. PvP Chess coming soon. Current difficulty: {self.thinking_time}')
         await ctx.send(embed=embed)
 
     @chess.command(name="difficulty")
@@ -588,18 +649,74 @@ class Chess(Cog):
         if value <= 0:
             await self._send_as_embed(ctx, "The difficulty must be a positive number.")
             return
+        if value > 10:
+            await self._send_as_embed(ctx, "That's too long to think.")
+            return
         self.thinking_time = value
+        await self._send_as_embed(ctx, f"I will now think {value} seconds per move.")
 
 
     @chess.command(name="play")
     async def play_chess(self, ctx):
         if self._current_game is None:
-            self._current_game = [Position(initial, 0, (True,True), (True,True), 0, 0)]
+            embed = new_embed()
+            embed.add_field(
+                name="Starting a game in 10s...",
+                value="React to select which side you are playing." # PVP
+            )
+            msg = await ctx.send(embed=embed)
+            await msg.add_reaction(CHESS_EMOTES['K'])
+            await msg.add_reaction(CHESS_EMOTES['k'])
+            
+            self._joining_msg = msg
+            await asyncio.sleep(8.)
+            self._joining_msg = None
+
+            w_players = self._participants['White']
+            b_players = self._participants['Black']
+            if len(w_players) == 0 and len(b_players) == 0:
+                await self._send_as_embed(ctx, "No players!")
+                return
+            elif len(b_players) == 0:
+                self._current_game = [Position(initial, 0, (True,True), (True,True), 0, 0)]
+                self._mode = 'PlayerW'
+                await self._send_as_embed(ctx, "You are playing as White against Computer!")
+            elif len(w_players) == 0:
+                self._current_game = [Position(initial, 0, (True,True), (True,True), 0, 0)]
+                self._mode = 'PlayerB'
+                async with ctx.typing():
+                    self._thonking = True
+                    start = time.time()
+                    for _depth, move, score in self._searcher.search(self._current_game[-1], self._current_game):
+                        if time.time() - start > self.thinking_time:
+                            break
+                    self._current_game.append(self._current_game[-1].move(move))
+                    self._turn_is_white = False
+                    self._thonking = False
+                    await self._send_as_embed(ctx, "You are playing as Black against Computer!")
+            else:
+                self._current_game = [Position(initial, 0, (True,True), (True,True), 0, 0)]
+                self._mode = 'PvP'
+                await self._send_as_embed(ctx, "This is a player vs player game! White goes first.")
             await self._send_board(ctx)
-            await self._send_as_embed(ctx, "Your turn.")
+            await self._send_as_embed(ctx, f"Make your first move with {self.bot.BOT_PREFIX}move!")
         else:
             await self._send_as_embed(ctx, "A game is already in progress!")
             return
+
+    @Cog.listener()
+    async def on_raw_reaction_add(self, *payload):
+        payload = payload[0]
+        if self._joining_msg and payload.message_id == self._joining_msg.id:
+            emote = payload.emoji.name
+            # print(emote)
+            if emote == 'wK':
+                # White
+                self._participants['White'].add(payload.user_id)
+            elif emote == 'bK':
+                # Black
+                self._participants['Black'].add(payload.user_id)
+
 
     @chess.command(name="stop")
     async def stop_chess(self, ctx):
@@ -607,42 +724,73 @@ class Chess(Cog):
             await self._send_as_embed(ctx, "No game is currently in progress! Use play to start one.")
             return
         else:
-            self._current_game = None
+            self.reset_game()
             await self._send_as_embed(ctx, "Game has been stopped.")
             return
 
     async def invalid_move(self, ctx):
         embed = new_embed()
         embed.set_author(name="Invalid move!")
-        embed.set_footer(text="Example: If you want to move the d2 Queen to d7, use either Qd7 or d2d7. Pieces are: K = king, Q = queen, R = rook, B = bishop, N = knight, or leave empty for pawns.")
+        embed.set_footer(text="Example: If you want to move the d2 Queen to d7, use either Qd7 or d2d7. Pieces are: K = king, Q = queen, R = rook, B = bishop, N = knight, or leave empty for pawns. Moves must be lowercase.")
         await ctx.send(embed=embed)
 
     @commands.command(name="move", aliases=["m"])
     async def chess_move(self, ctx, *move):
+        if ctx.author.id not in self._participants['White'] and ctx.author.id not in self._participants['Black']:
+            await self._send_as_embed(ctx, "You are not a participant of this game!", "Please react to the 'play' message for the next match.")
+            return
+        if self._turn_is_white and ctx.author.id not in self._participants['White']:
+            await self._send_as_embed(ctx, "Opponent's turn!")
+            return
+        if not self._turn_is_white and ctx.author.id not in self._participants['Black']:
+            await self._send_as_embed(ctx, "Opponent's turn!")
+            return
+        if self._thonking:
+            await self._send_as_embed(ctx, "I'm still thinking!")
+            return
         if not move:
             await self._send_as_embed(ctx, "Use a valid chess move e.g. Qd7 or d2d7.")
             return
         if not self._current_game:
             await self._send_as_embed(ctx, "No game is currently running.")
             return
+
+        self._thonking = True
+
         move = ''.join(move).replace(' ', '').replace('x', '')
         for matcher, matcher_idx in self.move_matchers:
             match = re.match(matcher, move)
             if match:
                 if matcher_idx == 0:
-                    parsed_move = parse(match.group(1)), parse(match.group(2))
+                    movefrom = match.group(1)
+                    moveto = match.group(2)
+                    if self._mode == 'PlayerB' or not self._turn_is_white:
+                        movefrom = flip_move(movefrom)
+                        movefrom = flip_move(moveto)
+                    parsed_move = parse(movefrom), parse(moveto)
                     break
                 elif matcher_idx == 1:  # Qd7 format
                     piece, dir_ = match.groups()
+                    if self._mode == 'PlayerB' or not self._turn_is_white:
+                        dir_ = flip_move(dir_)
                     piece = piece.upper()
                     if piece in ['K', 'Q', 'R', 'B', 'N', '']:
                         break
+                else:
+                    movefrom = match.group(2)
+                    moveto = match.group(3)
+                    if self._mode == 'PlayerB' or not self._turn_is_white:
+                        movefrom = flip_move(movefrom)
+                        movefrom = flip_move(moveto)
+                    parsed_move = parse(movefrom), parse(moveto)
+                    break
         else:
             await self.invalid_move(ctx)
             return
-        
-        game = self._current_game[-1]
 
+        game = self._current_game[-1]
+        
+        # Start with player move.
         possible_moves = game.gen_moves()
         if matcher_idx == 1:
             # if move is in format Qd7 instead of d2d7
@@ -656,14 +804,17 @@ class Chess(Cog):
                         parsed_moves.append(move_)
             if len(parsed_moves) == 0:
                 await self.invalid_move(ctx)
+                self._thonking = False
                 return
             if len(parsed_moves) > 1:
                 await self._send_as_embed(ctx, "Your move is ambiguous! Please use this format: <position moving from> <position moving to> e.g. d2d3 instead.")
+                self._thonking = False
                 return
             parsed_move = parsed_moves[0]
             
         elif parsed_move not in possible_moves:
             await self.invalid_move(ctx)
+            self._thonking = False
             return
 
         self._current_game.append(game.move(parsed_move))
@@ -671,25 +822,30 @@ class Chess(Cog):
 
         if self._current_game[-1].score <= -MATE_LOWER:
             await self._send_as_embed(ctx, "You win!")
-            self._current_game = None
+            self.reset_game()
+            self._thonking = False
             return
 
-        with ctx.typing():
-            start = time.time()
-            for _depth, move, score in self._searcher.search(self._current_game[-1], self._current_game):
-                if time.time() - start < self.thinking_time:
-                    break
-            if score == MATE_UPPER:
-                await self._send_as_embed(ctx, "Checkmate!")
-            self._current_game.append(self._current_game[-1].move(move))
-         
-        await self._send_board(ctx)
+        if self._mode != 'PvP':
+            # If computer is involved, then make a move in response
+            async with ctx.typing():
+                start = time.time()
+                for _depth, move, score in self._searcher.search(self._current_game[-1], self._current_game):
+                    if time.time() - start > self.thinking_time:
+                        break
+                self._current_game.append(self._current_game[-1].move(move))
+            
+                await self._send_board(ctx)
+        else:
+            self._turn_is_white = not self._turn_is_white
+        
         if self._current_game[-1].score <= -MATE_LOWER:
             await self._send_as_embed(ctx, "You lost!")
-            self._current_game = None
+            self.reset_game()
+        
+        self._thonking = False
 
 
 def setup(bot):
     bot.add_cog(Chess(bot))
-
 
