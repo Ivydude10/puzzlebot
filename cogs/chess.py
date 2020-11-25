@@ -473,66 +473,42 @@ def new_embed():
 
 
 CHESS_EMOTES = {
-    'K': '<:wK:780707162317914125>',
-    'Q': '<:wQ:780707162514915359>',
-    'B': '<:wB:780707162333904898>',
-    'N': '<:wN:780707162732888094>',
-    'R': '<:wR:780707162761986050>',
-    'P': '<:wp:780707162641006592>',
-    'k': '<:bK:780707162544275456>',
-    'q': '<:bQ:780707162406125569>',
-    'b': '<:bB:780707162422509600>',
-    'n': '<:bN:780707162342293565>',
-    'r': '<:bR:780707162720305173>',
-    'p': '<:bp:780707162615447552>',
-    '.': '<:blank:780707162363920455>',
-    # 'K': '<:wK:780677439898124293>',
-    # 'Q': '<:wQ:780677439939543052>',
-    # 'B': '<:wB:780677440024215582>',
-    # 'N': '<:wN:780677440052920320>',
-    # 'R': '<:wR:780677439700598785>',
-    # 'P': '<:wp:780677440032735252>',
-    # 'k': '<:bK:780677439973621790>',
-    # 'q': '<:bQ:780677439600852993>',
-    # 'b': '<:bB:780677439566118933>',
-    # 'n': '<:bN:780677439659442188>',
-    # 'r': '<:bR:780677439667175435>',
-    # 'p': '<:bp:780677439906775051>',
-    # '.': '<:empty:780677439620644915>',
-    '\n': '\n',
-    ' ': ''
+    'wK': "<:wK:780986666893967420>", 'wQ': "<:wQ:780986666907074580>", 'wB': "<:wB:780986667062132756>", 'wN': "<:wN:780986666977460224>", 'wR': "<:wR:780986667015733268>", 'wp': "<:wp:780986666810605599>", 
+    'wKL': "<:wKL:780986666713350165>", 'wQL': "<:wQL:780986666901962782>", 'wBL': "<:wBL:780986666679533569>", 'wNL': "<:wNL:780986666868670474>", 'wRL': "<:wRL:780986666902355968>", 'wpL': "<:wpL:780986666911399986>", 
+    'wKS': "<:wKS:780986666600366101>", 'wQS': "<:wQS:780986667099881472>", 'wBS': "<:wBS:780986666864869386>", 'wNS': "<:wNS:780986666869325845>", 'wRS': "<:wRS:780986666898030642>", 'wpS': "<:wpS:780986666563141663>", 
+    'bK': "<:bK:780986666499964949>", 'bQ': "<:bQ:780986666864214056>", 'bB': "<:bB:780986666600366121>", 'bN': "<:bN:780986666885316608>", 'bR': "<:bR:780986666718330922>", 'bp': "<:bp:780986666730389506>", 
+    'bKL': "<:bKL:780986666906812436>", 'bQL': "<:bQL:780986666910482453>", 'bBL': "<:bBL:780986666772594688>", 'bNL': "<:bNL:780986667074453504>", 'bRL': "<:bRL:780986667019534337>", 'bpL': "<:bpL:780986666869325824>", 
+    'bKS': "<:bKS:780986667019665408>", 'bQS': "<:bQS:780986666931847198>", 'bBS': "<:bBS:780986666784391168>", 'bNS': "<:bNS:780986666571661323>", 'bRS': "<:bRS:780986666855956520>", 'bpS': "<:bpS:780986666902880276>", 
+    'blank': "<:blank:780986666739433473>", 'blankL': "<:blankL:780986666936565770>", 'blankS': "<:blankS:780986666985979905>"
 }
 
-ALT_CHESS_EMOTES = {
-    'k': '<:wK:780707162317914125>',
-    'q': '<:wQ:780707162514915359>',
-    'b': '<:wB:780707162333904898>',
-    'n': '<:wN:780707162732888094>',
-    'r': '<:wR:780707162761986050>',
-    'p': '<:wp:780707162641006592>',
-    'K': '<:bK:780707162544275456>',
-    'Q': '<:bQ:780707162406125569>',
-    'B': '<:bB:780707162422509600>',
-    'N': '<:bN:780707162342293565>',
-    'R': '<:bR:780707162720305173>',
-    'P': '<:bp:780707162615447552>',
-    '.': '<:blank:780707162363920455>',
-    # 'k': '<:wK:780677439898124293>',
-    # 'q': '<:wQ:780677439939543052>',
-    # 'b': '<:wB:780677440024215582>',
-    # 'n': '<:wN:780677440052920320>',
-    # 'r': '<:wR:780677439700598785>',
-    # 'p': '<:wp:780677440032735252>',
-    # 'K': '<:bK:780677439973621790>',
-    # 'Q': '<:bQ:780677439600852993>',
-    # 'B': '<:bB:780677439566118933>',
-    # 'N': '<:bN:780677439659442188>',
-    # 'R': '<:bR:780677439667175435>',
-    # 'P': '<:bp:780677439906775051>',
-    # '.': '<:empty:780677439620644915>',
-    '\n': '\n',
-    ' ': ''
-}
+def get_chess_emote(char, flipped, x, y, last_move=None):
+    if flipped:
+        char = char.swapcase()
+    
+    highlighted = False
+    light = ((x + y) % 2 == 0) # from either side, top left is light square
+
+    if last_move is not None:
+        (lmfy, lmfx), (lmty, lmtx) = last_move
+        highlighted = (7-x == lmfx and y == lmfy) or (7-x == lmtx and y == lmty)
+        print(highlighted)
+
+    if char == '.':
+        char = 'blank'
+    elif char == '\n':
+        return char
+    elif char.isupper():
+        char = 'w' + (char.lower() if char == 'P' else char)
+    else:
+        char = 'b' + (char if char == 'p' else char.upper())
+    
+    if highlighted:
+        char += 'S'
+    elif light:
+        char += 'L'
+    return CHESS_EMOTES[char]
+
 
 NUMBERS = [":one:", ":two:", ":three:", ":four:", ":five:", ":six:", ":seven:", ":eight:"]
 RANK_LABELS = [f":regional_indicator_{c}:" for c in 'abcdefgh']
@@ -554,9 +530,14 @@ opening_moves = [
 """
 # TODO
 # Load Game
+# Take back
+# Resign
+# Offer Draw
 # Match History
+# Check / Mate / Stalemate
 """
 VERSION_LOG = [
+    "v1.1.3: Highlighted moves.",
     "v1.1.2: Move record and eval bar option.",
     "v1.1.1: Multiple openings and quality of life.",
     "v1.1.0: Implemented PvP and PvC (Black or White).",
@@ -573,7 +554,7 @@ class Chess(Cog):
         self._searcher = Searcher()
         self._thonking = False
         self.thinking_time = 1
-        self._joining_time = 10
+        self._joining_time = 5
         self._show_eval_bar = False
         self.reset_game()
         self.move_matchers = [
@@ -605,6 +586,14 @@ class Chess(Cog):
     def sigmoid(x):
         return 1 / (1 + math.exp(-x / 100))
 
+    @staticmethod
+    def convert_move_to_coord(move, flip):
+        mf, mt = move
+        mf, mt = render(mf), render(mt)
+        if flip:
+            mf, mt = flip_move(mf), flip_move(mt)
+        return ('abcdefgh'.index(mf[0]), '12345678'.index(mf[1])), ('abcdefgh'.index(mt[0]), '12345678'.index(mt[1]))
+
     async def _send_board(self, ctx, board=None):
         if board is None:
             board = self._current_game[-1]
@@ -612,11 +601,18 @@ class Chess(Cog):
         score = board.score
         score_rounded = round(self.sigmoid(score) * 8)
 
-        emote_dict = CHESS_EMOTES
+        if self._last_move:
+            flip = (not self._turn_is_white and self._mode != "PlayerB") or (self._turn_is_white and self._mode == 'PlayerB')
+            last_move = self.convert_move_to_coord(self._last_move, flip)
+            # print(self._last_move, last_move)
+        else:
+            last_move = None
+
+        flipped = False
         if self._mode == 'PlayerW':
             board = board.board.strip()
         elif self._mode == 'PlayerB':
-            emote_dict = ALT_CHESS_EMOTES
+            flipped = True
             board = board.board.strip()
         else:
             if not self._turn_is_white:
@@ -630,7 +626,7 @@ class Chess(Cog):
             numbers = list(reversed(numbers))
         board = board.split('\n')
         for i in range(8):
-            final_str += ''.join([emote_dict[c] for c in board[i]])
+            final_str += ''.join([get_chess_emote(c, flipped, i, j, last_move) for j, c in enumerate(board[i].strip())])
             final_str += numbers[8-i-1]
             if self._show_eval_bar:
                 if self._mode == 'PlayerB':
@@ -649,6 +645,7 @@ class Chess(Cog):
         self._joining_msg = None
         self._mode = None
         self._turn_is_white = True
+        self._last_move = None
         self._participants = {'Black': set(), 'White': set()}
 
     @group(name="chess", invoke_without_command=True)
@@ -736,8 +733,8 @@ class Chess(Cog):
             )
             game_starter = ctx.author.id
             msg = await ctx.send(embed=embed)
-            await msg.add_reaction(CHESS_EMOTES['K'])
-            await msg.add_reaction(CHESS_EMOTES['k'])
+            await msg.add_reaction(CHESS_EMOTES['wK']) # "⬜")
+            await msg.add_reaction(CHESS_EMOTES['bK']) # "⬛")
             
             self._joining_msg = msg
             for i in range(self._joining_time-1, 0, -1):
@@ -766,12 +763,11 @@ class Chess(Cog):
                 async with ctx.typing():
                     self._thonking = True
                     opening = random.choice(opening_moves)
+                    move = (parse(opening[:2]), parse(opening[2:]))
                     self._current_game.append(
-                        self._current_game[-1].move(
-                            (parse(opening[:2]), parse(opening[2:]))
-                        )
+                        self._current_game[-1].move(move)
                     )
-                    self._turn_is_white = False
+                    self._last_move = move
                     self._thonking = False
                     await self._send_as_embed(ctx, "You are playing as Black against Computer!")
             else:
@@ -781,6 +777,7 @@ class Chess(Cog):
             await self._send_board(ctx)
             if self._mode == 'PlayerB':
                 # Show First move
+                self._turn_is_white = False
                 await self._send_as_embed(ctx, "White: " + opening)
                 pass
             await self._send_as_embed(ctx, f"Make your first move with {self.bot.BOT_PREFIX}move!")
@@ -794,10 +791,10 @@ class Chess(Cog):
         if self._joining_msg and payload.message_id == self._joining_msg.id and payload.user_id != self.bot.user.id:
             emote = payload.emoji.name
             # print(emote)
-            if emote == 'wK':
+            if emote == 'wK':# '⬜': #
                 # White
                 self._participants['White'].add(payload.user_id)
-            elif emote == 'bK':
+            elif emote == 'bK': # '⬛':  #
                 # Black
                 self._participants['Black'].add(payload.user_id)
 
@@ -904,6 +901,7 @@ class Chess(Cog):
             return
 
         self._current_game.append(game.move(parsed_move))
+        self._last_move = parsed_move
         playermove = (movefrom + moveto) if self._turn_is_white else (flip_move(movefrom) + flip_move(moveto))
         await self._send_as_embed(ctx, ("White: " if self._turn_is_white else "Black: ..") + self._current_game[-2].board[parsed_move[0]].upper().replace('P', '') + playermove)
         await self._send_reversed_board(ctx)
@@ -922,9 +920,12 @@ class Chess(Cog):
                     if time.time() - start > self.thinking_time:
                         break
                 self._current_game.append(self._current_game[-1].move(move))
+                self._last_move = move
                 await self._send_as_embed(ctx, ("Black" if self._turn_is_white else "White") + ": " + self._current_game[-2].board[move[0]].upper().replace('P', '') + render(move[0]) + render(move[1]))
             
+                self._turn_is_white = not self._turn_is_white
                 await self._send_board(ctx)
+                self._turn_is_white = not self._turn_is_white
         else:
             self._turn_is_white = not self._turn_is_white
         
