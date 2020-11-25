@@ -617,6 +617,8 @@ class Chess(Cog):
         else:
             if not self._turn_is_white:
                 board = board.rotate().board.strip()
+                score = -score
+                score_rounded = round(self.sigmoid(score) * 8)
             else:
                 board = board.board.strip()
 
