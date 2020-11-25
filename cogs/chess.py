@@ -456,6 +456,7 @@ DISCORD
 """
 import os
 import time
+import math
 import random
 import asyncio
 import requests
@@ -533,12 +534,30 @@ ALT_CHESS_EMOTES = {
     ' ': ''
 }
 
+NUMBERS = [":one:", ":two:", ":three:", ":four:", ":five:", ":six:", ":seven:", ":eight:"]
+RANK_LABELS = [f":regional_indicator_{c}:" for c in 'abcdefgh']
 
 def flip_move(move):
     row = 'abcdefgh'
     col = '12345678'
     return row[7-row.index(move[0])] + col[7-col.index(move[1])]
 
+
+opening_moves = [
+    'd2d4', 'd2d4', 'd2d4', 'd2d4',
+    'e2e4', 'e2e4', 'e2e4', 'e2e4',
+    'c2c4', 'c2c4', 'c2c4',
+    'g1f3', 'g1f3',
+    'b1c3'
+]
+
+VERSION_LOG = [
+    "v1.1.2: Move record and eval bar option.",
+    "v1.1.1: Multiple openings and quality of life.",
+    "v1.1.0: Implemented PvP and PvC (Black or White).",
+    "v1.0.1: Allowed difficulty adjustments.",
+    "v1.0.0: Basic Chess game."
+]
 
 class Chess(Cog):
     """
@@ -549,6 +568,8 @@ class Chess(Cog):
         self._searcher = Searcher()
         self._thonking = False
         self.thinking_time = 1
+        self._joining_time = 10
+        self._show_eval_bar = False
         self.reset_game()
         self.move_matchers = [
             ('([a-h][1-8])' * 2, 0),
@@ -559,6 +580,10 @@ class Chess(Cog):
     @Cog.listener()
     async def on_ready(self):
         print('Cog "Chess" Ready!')
+
+    #####################
+    # DISPLAY FUNCTIONS #
+    #####################
 
     async def _send_as_embed(self, ctx, title, description=""):
         embed = new_embed()
@@ -571,9 +596,16 @@ class Chess(Cog):
             embed.set_author(name=title)
         await ctx.send(embed=embed)
 
+    @staticmethod
+    def sigmoid(x):
+        return 1 / (1 + math.exp(-x / 100))
+
     async def _send_board(self, ctx, board=None):
         if board is None:
             board = self._current_game[-1]
+
+        score = board.score
+        score_rounded = round(self.sigmoid(score) * 8)
 
         emote_dict = CHESS_EMOTES
         if self._mode == 'PlayerW':
@@ -587,18 +619,21 @@ class Chess(Cog):
             else:
                 board = board.board.strip()
 
-        
-        final_str = ":regional_indicator_h::regional_indicator_g::regional_indicator_f::regional_indicator_e::regional_indicator_d::regional_indicator_c::regional_indicator_b::regional_indicator_a:\n"if self._mode == 'PlayerB' else ":regional_indicator_a::regional_indicator_b::regional_indicator_c::regional_indicator_d::regional_indicator_e::regional_indicator_f::regional_indicator_g::regional_indicator_h:\n"
-        numbers = [":one:", ":two:", ":three:", ":four:", ":five:", ":six:", ":seven:", ":eight:"]
+        final_str = (''.join(reversed(RANK_LABELS)) if self._mode == 'PlayerB' else ''.join(RANK_LABELS)) + (" " * 10 + str(score) if self._show_eval_bar else '') + "\n"
+        numbers = NUMBERS
         if self._mode == 'PlayerB':
             numbers = list(reversed(numbers))
-        i = 0
-        for c in board:
-            if c == '\n':
-                final_str += numbers[7-i]
-                i += 1
-            final_str += emote_dict[c]
-        final_str += numbers[7-i]
+        board = board.split('\n')
+        for i in range(8):
+            final_str += ''.join([emote_dict[c] for c in board[i]])
+            final_str += numbers[8-i-1]
+            if self._show_eval_bar:
+                if self._mode == 'PlayerB':
+                    final_str += "   " + ("⬛" if i >= score_rounded else "⬜")
+                else:
+                    final_str += "   " + ("⬜" if (8-i-1) < score_rounded else "⬛")
+            final_str += '\n'
+        # print(final_str)
         await ctx.send(final_str)
         
     async def _send_reversed_board(self, ctx):
@@ -614,6 +649,10 @@ class Chess(Cog):
     @group(name="chess", invoke_without_command=True)
     async def chess(self, ctx):
         await self.chess_help(ctx)
+
+    ########
+    # INFO #
+    ########
 
     async def chess_help(self, ctx):
         embed = new_embed()
@@ -634,8 +673,24 @@ class Chess(Cog):
             name=f"{self.bot.BOT_PREFIX}chess difficulty <n>",
             value="Set bot difficulty (n = seconds to think per move)",
             inline=True)
-        embed.set_footer(text=f'Note: This bot doesn\'t understand checkmate; you have to take the king. Current difficulty: {self.thinking_time}')
+        embed.add_field(
+            name=f"{self.bot.BOT_PREFIX}chess evalbar",
+            value="Toggle eval bar when playing",
+            inline=True)
+        embed.set_footer(text=f"Note: This bot doesn\'t understand checkmate; you have to take the king.\nCurrent difficulty: {self.thinking_time}.\nEval bar: {('OFF', 'ON')[self._show_eval_bar]}")
         await ctx.send(embed=embed)
+
+
+    @chess.command(name="version")
+    async def check_version(self, ctx, full=None):
+        if full:
+            await self._send_as_embed(ctx, VERSION_LOG[0], '\n'.join(VERSION_LOG[1:]))
+        else:
+            await self._send_as_embed(ctx, VERSION_LOG[0])
+
+    ############
+    # SETTINGS #
+    ############
 
     @chess.command(name="difficulty")
     async def set_difficulty(self, ctx, value=None):
@@ -655,29 +710,48 @@ class Chess(Cog):
         self.thinking_time = value
         await self._send_as_embed(ctx, f"I will now think {value} seconds per move.")
 
+    @chess.command(name="evalbar")
+    async def toggle_evalbar(self, ctx, value=None):
+        self._show_eval_bar = not self._show_eval_bar
+        await self._send_as_embed(ctx, f"Eval bar is {"ON" if self._show_eval_bar else "OFF"}.")
+
+    #############
+    # CORE GAME #
+    #############
 
     @chess.command(name="play")
     async def play_chess(self, ctx):
+        if self._joining_msg is not None:
+            return
         if self._current_game is None:
             embed = new_embed()
             embed.add_field(
-                name="Starting a game in 10s...",
+                name=f"Starting a game in {self._joining_time}s...",
                 value="React to select which side you are playing." # PVP
             )
+            game_starter = ctx.author.id
             msg = await ctx.send(embed=embed)
             await msg.add_reaction(CHESS_EMOTES['K'])
             await msg.add_reaction(CHESS_EMOTES['k'])
             
             self._joining_msg = msg
-            await asyncio.sleep(8.)
+            for i in range(self._joining_time-1, 0, -1):
+                embed = new_embed()
+                embed.add_field(
+                    name=f"Starting a game in {i}s...",
+                    value="React to select which side you are playing." # PVP
+                )
+                await msg.edit(embed=embed)
+                await asyncio.sleep(0.5)
             self._joining_msg = None
 
             w_players = self._participants['White']
             b_players = self._participants['Black']
+            
             if len(w_players) == 0 and len(b_players) == 0:
-                await self._send_as_embed(ctx, "No players!")
-                return
-            elif len(b_players) == 0:
+                self._participants['White'].add(game_starter)
+                w_players = self._participants['White']
+            if len(b_players) == 0:
                 self._current_game = [Position(initial, 0, (True,True), (True,True), 0, 0)]
                 self._mode = 'PlayerW'
                 await self._send_as_embed(ctx, "You are playing as White against Computer!")
@@ -686,11 +760,12 @@ class Chess(Cog):
                 self._mode = 'PlayerB'
                 async with ctx.typing():
                     self._thonking = True
-                    start = time.time()
-                    for _depth, move, score in self._searcher.search(self._current_game[-1], self._current_game):
-                        if time.time() - start > self.thinking_time:
-                            break
-                    self._current_game.append(self._current_game[-1].move(move))
+                    opening = random.choice(opening_moves)
+                    self._current_game.append(
+                        self._current_game[-1].move(
+                            (parse(opening[:2]), parse(opening[2:]))
+                        )
+                    )
                     self._turn_is_white = False
                     self._thonking = False
                     await self._send_as_embed(ctx, "You are playing as Black against Computer!")
@@ -699,6 +774,10 @@ class Chess(Cog):
                 self._mode = 'PvP'
                 await self._send_as_embed(ctx, "This is a player vs player game! White goes first.")
             await self._send_board(ctx)
+            if self._mode == 'PlayerB':
+                # Show First move
+                await self._send_as_embed(ctx, "White: " + opening)
+                pass
             await self._send_as_embed(ctx, f"Make your first move with {self.bot.BOT_PREFIX}move!")
         else:
             await self._send_as_embed(ctx, "A game is already in progress!")
@@ -707,7 +786,7 @@ class Chess(Cog):
     @Cog.listener()
     async def on_raw_reaction_add(self, *payload):
         payload = payload[0]
-        if self._joining_msg and payload.message_id == self._joining_msg.id:
+        if self._joining_msg and payload.message_id == self._joining_msg.id and payload.user_id != self.bot.user.id:
             emote = payload.emoji.name
             # print(emote)
             if emote == 'wK':
@@ -764,24 +843,24 @@ class Chess(Cog):
                 if matcher_idx == 0:
                     movefrom = match.group(1)
                     moveto = match.group(2)
-                    if self._mode == 'PlayerB' or not self._turn_is_white:
+                    if not self._turn_is_white:
                         movefrom = flip_move(movefrom)
-                        movefrom = flip_move(moveto)
+                        moveto = flip_move(moveto)
                     parsed_move = parse(movefrom), parse(moveto)
                     break
                 elif matcher_idx == 1:  # Qd7 format
-                    piece, dir_ = match.groups()
-                    if self._mode == 'PlayerB' or not self._turn_is_white:
-                        dir_ = flip_move(dir_)
+                    piece, moveto = match.group(1), match.group(2)
+                    if not self._turn_is_white:
+                        moveto = flip_move(moveto)
                     piece = piece.upper()
                     if piece in ['K', 'Q', 'R', 'B', 'N', '']:
                         break
                 else:
                     movefrom = match.group(2)
                     moveto = match.group(3)
-                    if self._mode == 'PlayerB' or not self._turn_is_white:
+                    if not self._turn_is_white:
                         movefrom = flip_move(movefrom)
-                        movefrom = flip_move(moveto)
+                        moveto = flip_move(moveto)
                     parsed_move = parse(movefrom), parse(moveto)
                     break
         else:
@@ -795,7 +874,7 @@ class Chess(Cog):
         possible_moves = game.gen_moves()
         if matcher_idx == 1:
             # if move is in format Qd7 instead of d2d7
-            parsed_dir = parse(dir_)
+            parsed_dir = parse(moveto)
             parsed_moves = []
             for move_ in possible_moves:
                 # format: (81, 76)
@@ -812,6 +891,7 @@ class Chess(Cog):
                 self._thonking = False
                 return
             parsed_move = parsed_moves[0]
+            movefrom = render(parsed_move[0])
             
         elif parsed_move not in possible_moves:
             await self.invalid_move(ctx)
@@ -819,6 +899,8 @@ class Chess(Cog):
             return
 
         self._current_game.append(game.move(parsed_move))
+        playermove = (movefrom + moveto) if self._turn_is_white else (flip_move(movefrom) + flip_move(moveto))
+        await self._send_as_embed(ctx, ("White: " if self._turn_is_white else "Black: ..") + self._current_game[-2].board[parsed_move[0]].upper().replace('P', '') + playermove)
         await self._send_reversed_board(ctx)
 
         if self._current_game[-1].score <= -MATE_LOWER:
@@ -835,6 +917,7 @@ class Chess(Cog):
                     if time.time() - start > self.thinking_time:
                         break
                 self._current_game.append(self._current_game[-1].move(move))
+                await self._send_as_embed(ctx, ("Black" if self._turn_is_white else "White") + ": " + self._current_game[-2].board[move[0]].upper().replace('P', '') + render(move[0]) + render(move[1]))
             
                 await self._send_board(ctx)
         else:
