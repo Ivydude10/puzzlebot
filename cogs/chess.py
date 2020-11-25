@@ -732,7 +732,7 @@ class Chess(Cog):
         if value <= 0:
             await self._send_as_embed(ctx, "The time must be a positive number.")
             return
-        self._joining_time = value
+        self._joining_time = int(round(value)
         await self._send_as_embed(ctx, f"I will now wait {self._joining_time} seconds for players to join.")
 
     #############
