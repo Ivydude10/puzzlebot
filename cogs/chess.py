@@ -551,6 +551,11 @@ opening_moves = [
     'b1c3'
 ]
 
+"""
+# TODO
+# Load Game
+# Match History
+"""
 VERSION_LOG = [
     "v1.1.2: Move record and eval bar option.",
     "v1.1.1: Multiple openings and quality of life.",
@@ -666,7 +671,7 @@ class Chess(Cog):
             value="Stop the current chess game",
             inline=True)
         embed.add_field(
-            name=f"{self.bot.BOT_PREFIX}move",
+            name=f"{self.bot.BOT_PREFIX}move (or {self.bot.BOT_PREFIX}m)",
             value="Play a move e.g. Qd7",
             inline=True)
         embed.add_field(
