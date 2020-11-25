@@ -554,7 +554,7 @@ class Chess(Cog):
         self._searcher = Searcher()
         self._thonking = False
         self.thinking_time = 1
-        self._joining_time = 5
+        self._joining_time = 10 # 5
         self._show_eval_bar = False
         self.reset_game()
         self.move_matchers = [
@@ -716,6 +716,22 @@ class Chess(Cog):
     async def toggle_evalbar(self, ctx, value=None):
         self._show_eval_bar = not self._show_eval_bar
         await self._send_as_embed(ctx, f"Eval bar is {'ON' if self._show_eval_bar else 'OFF'}.")
+    
+    @has_any_role("Bot Maintainer")
+    @chess.command(name="joiningtime")
+    async def set_joining_time(self, ctx, value=None):
+        if not value:
+            await self._send_as_embed(ctx, "Set the waiting time for players to join a match.")
+            return
+        if not value.isnumeric():
+            await self._send_as_embed(ctx, "Argument must be a number i.e. the time in seconds.")
+            return
+        value = float(value)
+        if value <= 0:
+            await self._send_as_embed(ctx, "The time must be a positive number.")
+            return
+        self._joining_time = value
+        await self._send_as_embed(ctx, f"I will now wait {self._joining_time} seconds for players to join.")
 
     #############
     # CORE GAME #
