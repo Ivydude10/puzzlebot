@@ -713,7 +713,7 @@ class Chess(Cog):
     @chess.command(name="evalbar")
     async def toggle_evalbar(self, ctx, value=None):
         self._show_eval_bar = not self._show_eval_bar
-        await self._send_as_embed(ctx, f"Eval bar is {"ON" if self._show_eval_bar else "OFF"}.")
+        await self._send_as_embed(ctx, f"Eval bar is {'ON' if self._show_eval_bar else 'OFF'}.")
 
     #############
     # CORE GAME #
