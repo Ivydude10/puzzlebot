@@ -518,13 +518,9 @@ def flip_move(move):
     return row[7-row.index(move[0])] + col[7-col.index(move[1])]
 
 
-opening_moves = [
-    'd2d4', 'd2d4', 'd2d4', 'd2d4',
-    'e2e4', 'e2e4', 'e2e4', 'e2e4',
-    'c2c4', 'c2c4', 'c2c4',
-    'g1f3', 'g1f3',
-    'b1c3'
-]
+# Possible opening moves and their likelihood
+opening_moves = ['d2d4'] * 18 + ['e2e4'] * 18 + ['c2c4'] * 15 + ['g1f3'] * 10 + ['b1c3'] * 8 + \
+    ['b2b3', 'a2a4', 'h2h4', 'g2g3', 'a2a3', 'h2h3', 'd2d3', 'e2e3']
 
 """
 # TODO
@@ -580,7 +576,7 @@ class Chess(Cog):
             )
         else:
             embed.set_author(name=title)
-        await ctx.send(embed=embed)
+        return await ctx.send(embed=embed)
 
     @staticmethod
     def sigmoid(x):
@@ -602,7 +598,7 @@ class Chess(Cog):
 
         if self._last_move:
             flip = (not self._turn_is_white and self._mode != "PlayerB") or (self._turn_is_white and self._mode == 'PlayerB')
-            last_move = self.convert_move_to_coord(self._last_move, flip)
+            last_move = self.convert_move_to_coord(self._last_move[-1], flip)
             # print(self._last_move, last_move)
         else:
             last_move = None
@@ -649,10 +645,11 @@ class Chess(Cog):
     def reset_game(self):
         self._current_game = None
         self._joining_msg = None
+        self._takeback_msg = None
         self._mode = None
         self._turn_is_white = True
         self._move_history = []
-        self._last_move = None
+        self._last_move = []
         self._participants = {'Black': set(), 'White': set(), 'Names': {}}
 
     @group(name="chess", invoke_without_command=True)
@@ -815,7 +812,7 @@ class Chess(Cog):
                     self._current_game.append(
                         self._current_game[-1].move(move)
                     )
-                    self._last_move = move
+                    self._last_move.append(move)
                     self._thonking = False
                     match_start_embed.set_author(name="You are playing as Black against Computer!")
             else:
@@ -839,9 +836,11 @@ class Chess(Cog):
                 # Show First move
                 self._turn_is_white = False
                 await self._send_as_embed(ctx, "White: " + opening)
+                if opening in ['g1f3', 'b1c3']:
+                    opening = 'N' + opening
                 self._move_history.append(opening)
                 pass
-            await self._send_as_embed(ctx, f"Make your first move with {self.bot.BOT_PREFIX}move!")
+            await self._send_as_embed(ctx, f"Make your first move with `{self.bot.BOT_PREFIX}m`!")
         else:
             await self._send_as_embed(ctx, "A game is already in progress!")
             return
@@ -860,6 +859,16 @@ class Chess(Cog):
                 # Black
                 self._participants['Black'].add(payload.user_id)
                 self._participants['Names'][payload.user_id] = payload.member.display_name
+        elif self._takeback_msg and payload.message_id == self._takeback_msg.id and payload.user_id != self.bot.user.id:
+            if payload.user_id not in self._takeback_judge:
+                return
+            emote = payload.emoji.name
+            if emote == '🇾':
+                # Accept
+                self._takeback_accepted = True
+            elif emote == '🇳':
+                # Refuse
+                self._takeback_denied = True
 
 
     @chess.command(name="stop")
@@ -880,6 +889,9 @@ class Chess(Cog):
 
     @commands.command(name="move", aliases=["m"])
     async def chess_move(self, ctx, *move):
+        if not self._current_game:
+            await self._send_as_embed(ctx, "No current match!")
+            return
         if ctx.author.id not in self._participants['White'] and ctx.author.id not in self._participants['Black']:
             await self._send_as_embed(ctx, "You are not a participant of this game!", "Please react to the 'play' message for the next match.")
             return
@@ -964,7 +976,7 @@ class Chess(Cog):
             return
 
         self._current_game.append(game.move(parsed_move))
-        self._last_move = parsed_move
+        self._last_move.append(parsed_move)
         playermove = (movefrom + moveto) if self._turn_is_white else (flip_move(movefrom) + flip_move(moveto))
         # Get the piece name and put it next to the playermove e.g. Qd2d4
         recorded_move = self._current_game[-2].board[parsed_move[0]].upper().replace('P', '') + playermove
@@ -986,7 +998,7 @@ class Chess(Cog):
                     if time.time() - start > self.thinking_time:
                         break
                 self._current_game.append(self._current_game[-1].move(move))
-                self._last_move = move
+                self._last_move.append(move)
                 computer_move = self._current_game[-2].board[move[0]].upper().replace('P', '') + render(move[0]) + render(move[1])
                 self._move_history.append(computer_move)
                 await self._send_as_embed(ctx, ("Black" if self._turn_is_white else "White") + ": " + computer_move)
@@ -1003,6 +1015,62 @@ class Chess(Cog):
         
         self._thonking = False
 
+    @chess.command(name="takeback")
+    async def takeback(self, ctx):
+        if self._current_game is None:
+            await self._send_as_embed(ctx, "No current match!")
+            return
+        if self._thonking:
+            await self._send_as_embed(ctx, "I'm still thinking!")
+            return
+        if ctx.author.id not in self._participants['White'] and ctx.author.id not in self._participants['Black']:
+            await self._send_as_embed(ctx, "You are not a participant of this game!", "Please react to the 'play' message for the next match.")
+            return
+        takeback_count = 1
+        if self._turn_is_white and not ctx.author.id in self._participants['Black']:
+            takeback_count = 2
+            
+        if not self._turn_is_white and not ctx.author.id in self._participants['White']:
+            takeback_count = 2
+
+        if len(self._current_game) - 1 < takeback_count:
+            await self._send_as_embed(ctx, "Cannot takeback!", "You haven't made enough moves!")
+            return
+
+        self._takeback_accepted = self._takeback_denied = False
+        turn_was_white = self._turn_is_white
+        if self._mode == 'PvP':
+            self._takeback_judge = self._participants['Black'] if self._turn_is_white else self._participants['White']
+            self._takeback_msg = await self._send_as_embed(ctx, f"A takeback was requested by {ctx.author.display_name}.", "React to accept or refuse.")
+            await self._takeback_msg.add_reaction('🇾')
+            await self._takeback_msg.add_reaction('🇳')
+            start = time.time()
+            while True:
+                await asyncio.sleep(0.1)
+                if self._takeback_accepted or self._takeback_denied or turn_was_white != self._turn_is_white:
+                    break
+                if time.time() - start > 8:
+                    await self._takeback_msg.edit(content="*Takeback request timed out.*", embed=None)
+                    break
+            self._takeback_msg = None
+        else: 
+            self._takeback_accepted = True
+
+        if self._takeback_accepted:
+            self._current_game = self._current_game[:-takeback_count]
+            self._move_history = self._move_history[:-takeback_count]
+            self._last_move = self._last_move[:-takeback_count]
+            for i in range(takeback_count):
+                self._turn_is_white = not self._turn_is_white
+            if self._mode == 'PvP':
+                await self._send_as_embed(ctx, "Takeback request accepted!")
+            else:
+                await self._send_as_embed(ctx, "Your last move was undone!")
+            await self._send_board(ctx)
+        elif self._takeback_denied:
+            await self._send_as_embed(ctx, "Takeback request denied!")
+
+            
 
 def setup(bot):
     bot.add_cog(Chess(bot))
