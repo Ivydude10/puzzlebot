@@ -492,7 +492,6 @@ def get_chess_emote(char, flipped, x, y, last_move=None):
     if last_move is not None:
         (lmfy, lmfx), (lmty, lmtx) = last_move
         highlighted = (7-x == lmfx and y == lmfy) or (7-x == lmtx and y == lmty)
-        print(highlighted)
 
     if char == '.':
         char = 'blank'
@@ -599,7 +598,6 @@ class Chess(Cog):
             board = self._current_game[-1]
 
         score = board.score
-        score_rounded = round(self.sigmoid(score) * 8)
 
         if self._last_move:
             flip = (not self._turn_is_white and self._mode != "PlayerB") or (self._turn_is_white and self._mode == 'PlayerB')
@@ -614,13 +612,15 @@ class Chess(Cog):
         elif self._mode == 'PlayerB':
             flipped = True
             board = board.board.strip()
+            score = -score
         else:
             if not self._turn_is_white:
                 board = board.rotate().board.strip()
                 score = -score
-                score_rounded = round(self.sigmoid(score) * 8)
             else:
                 board = board.board.strip()
+
+        score_rounded = round(self.sigmoid(score) * 8)
 
         final_str = (''.join(reversed(RANK_LABELS)) if self._mode == 'PlayerB' else ''.join(RANK_LABELS)) + (" " * 10 + str(score) if self._show_eval_bar else '') + "\n"
         numbers = NUMBERS
@@ -636,8 +636,11 @@ class Chess(Cog):
                 else:
                     final_str += "   " + ("⬜" if (8-i-1) < score_rounded else "⬛")
             final_str += '\n'
-        # print(final_str)
-        await ctx.send(final_str)
+        try:
+            await ctx.send(final_str)
+        except:
+            await ctx.send("Failed to send the board. Please check logs.")
+            print(final_str)
         
     async def _send_reversed_board(self, ctx):
         await self._send_board(ctx, self._current_game[-1].rotate())
@@ -792,6 +795,7 @@ class Chess(Cog):
                 self._current_game = [Position(initial, 0, (True,True), (True,True), 0, 0)]
                 self._mode = 'PvP'
                 await self._send_as_embed(ctx, "This is a player vs player game! White goes first.")
+            
             await self._send_board(ctx)
             if self._mode == 'PlayerB':
                 # Show First move
