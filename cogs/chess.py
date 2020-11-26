@@ -525,10 +525,9 @@ opening_moves = ['d2d4'] * 18 + ['e2e4'] * 18 + ['c2c4'] * 15 + ['g1f3'] * 10 + 
 """
 # TODO
 # Load Game
-# Take back
 # Resign
 # Offer Draw
-# Match History
+# Save games to database
 # Check / Mate / Stalemate
 """
 VERSION_LOG = [
@@ -991,7 +990,11 @@ class Chess(Cog):
         await self._send_reversed_board(ctx)
 
         if self._current_game[-1].score <= -MATE_LOWER:
-            await self._send_as_embed(ctx, "You win!")
+            if self._mode == 'PvP':
+                final_str = 'White wins!' if self._turn_is_white else "Black wins!"
+            else:
+                final_str = 'YOU WIN!'
+            await self._send_as_embed(ctx, final_str)
             self.reset_game()
             self._thonking = False
             return
@@ -1016,7 +1019,7 @@ class Chess(Cog):
             self._turn_is_white = not self._turn_is_white
         
         if self._current_game[-1].score <= -MATE_LOWER:
-            await self._send_as_embed(ctx, "You lost!")
+            await self._send_as_embed(ctx, "YOU LOSE!")
             self.reset_game()
         
         self._thonking = False
