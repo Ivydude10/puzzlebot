@@ -532,6 +532,7 @@ opening_moves = ['d2d4'] * 18 + ['e2e4'] * 18 + ['c2c4'] * 15 + ['g1f3'] * 10 + 
 # Check / Mate / Stalemate
 """
 VERSION_LOG = [
+    "v1.1.5: Takebacks.",
     "v1.1.4: Current match log and player list.",
     "v1.1.3: Highlighted moves.",
     "v1.1.2: Move record and eval bar option.",
@@ -686,6 +687,10 @@ class Chess(Cog):
         embed.add_field(
             name=f"{self.bot.BOT_PREFIX}chess log",
             value="Move log of the current match",
+            inline=True)
+        embed.add_field(
+            name=f"{self.bot.BOT_PREFIX}takeback",
+            value="Take back your last move",
             inline=True)
         embed.set_footer(text=f"Note: This bot doesn\'t understand checkmate; you have to take the king.\nCurrent difficulty: {self.thinking_time}.\nEval bar: {('OFF', 'ON')[self._show_eval_bar]}")
         await ctx.send(embed=embed)
@@ -939,6 +944,7 @@ class Chess(Cog):
                         movefrom = flip_move(movefrom)
                         moveto = flip_move(moveto)
                     parsed_move = parse(movefrom), parse(moveto)
+                    matcher_idx = 0
                     break
         else:
             await self.invalid_move(ctx)
@@ -1015,7 +1021,7 @@ class Chess(Cog):
         
         self._thonking = False
 
-    @chess.command(name="takeback")
+    @commands.command(name="takeback")
     async def takeback(self, ctx):
         if self._current_game is None:
             await self._send_as_embed(ctx, "No current match!")
