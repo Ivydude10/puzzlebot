@@ -536,6 +536,7 @@ opening_moves = [
 # Check / Mate / Stalemate
 """
 VERSION_LOG = [
+    "v1.1.4: Current match log and player list.",
     "v1.1.3: Highlighted moves.",
     "v1.1.2: Move record and eval bar option.",
     "v1.1.1: Multiple openings and quality of life.",
@@ -553,7 +554,7 @@ class Chess(Cog):
         self._searcher = Searcher()
         self._thonking = False
         self.thinking_time = 1
-        self._joining_time = 10 # 5
+        self._joining_time = 5
         self._show_eval_bar = False
         self.reset_game()
         self.move_matchers = [
@@ -622,7 +623,7 @@ class Chess(Cog):
 
         score_rounded = round(self.sigmoid(score) * 8)
 
-        final_str = (''.join(reversed(RANK_LABELS)) if self._mode == 'PlayerB' else ''.join(RANK_LABELS)) + (" " * 10 + str(score) if self._show_eval_bar else '') + "\n"
+        final_str = (''.join(reversed(RANK_LABELS)) if self._mode == 'PlayerB' else ''.join(RANK_LABELS)) + ':triangular_ruler:' + (" " * 3 + str(score) if self._show_eval_bar else '') + "\n"
         numbers = NUMBERS
         if self._mode == 'PlayerB':
             numbers = list(reversed(numbers))
@@ -650,8 +651,9 @@ class Chess(Cog):
         self._joining_msg = None
         self._mode = None
         self._turn_is_white = True
+        self._move_history = []
         self._last_move = None
-        self._participants = {'Black': set(), 'White': set()}
+        self._participants = {'Black': set(), 'White': set(), 'Names': {}}
 
     @group(name="chess", invoke_without_command=True)
     async def chess(self, ctx):
@@ -684,6 +686,10 @@ class Chess(Cog):
             name=f"{self.bot.BOT_PREFIX}chess evalbar",
             value="Toggle eval bar when playing",
             inline=True)
+        embed.add_field(
+            name=f"{self.bot.BOT_PREFIX}chess log",
+            value="Move log of the current match",
+            inline=True)
         embed.set_footer(text=f"Note: This bot doesn\'t understand checkmate; you have to take the king.\nCurrent difficulty: {self.thinking_time}.\nEval bar: {('OFF', 'ON')[self._show_eval_bar]}")
         await ctx.send(embed=embed)
 
@@ -694,6 +700,18 @@ class Chess(Cog):
             await self._send_as_embed(ctx, VERSION_LOG[0], '\n'.join(VERSION_LOG[1:]))
         else:
             await self._send_as_embed(ctx, VERSION_LOG[0])
+
+
+    @chess.command(name="history", aliases=['log'])
+    async def view_match_history(self, ctx, *_):
+        if not self._current_game:
+            await self._send_as_embed(ctx, 'No match currently happening!')
+            return
+        log = self._move_history
+        await self._send_as_embed(
+            ctx, "Current match log:",
+            "\n".join(f"{i//2 + 1}.\t{log[i]}\t{log[i+1] if i+1 < len(log) else '--'}" for i in range(0, len(log), 2)) if len(log) else "1.\t--"
+        )
 
     ############
     # SETTINGS #
@@ -747,6 +765,7 @@ class Chess(Cog):
         if self._joining_msg is not None:
             return
         if self._current_game is None:
+            self.reset_game()
             embed = new_embed()
             embed.add_field(
                 name=f"Starting a game in {self._joining_time}s...",
@@ -770,14 +789,22 @@ class Chess(Cog):
 
             w_players = self._participants['White']
             b_players = self._participants['Black']
+
+            match_start_embed = new_embed()
             
             if len(w_players) == 0 and len(b_players) == 0:
                 self._participants['White'].add(game_starter)
+                self._participants['Names'][game_starter] = ctx.author.display_name
                 w_players = self._participants['White']
+            
+            w_player_list = '\n'.join([self._participants['Names'][mem] for mem in w_players])
+            b_player_list = '\n'.join([self._participants['Names'][mem] for mem in b_players])
+
             if len(b_players) == 0:
                 self._current_game = [Position(initial, 0, (True,True), (True,True), 0, 0)]
                 self._mode = 'PlayerW'
-                await self._send_as_embed(ctx, "You are playing as White against Computer!")
+                match_start_embed.set_author(name="You are playing as White against Computer!")
+                
             elif len(w_players) == 0:
                 self._current_game = [Position(initial, 0, (True,True), (True,True), 0, 0)]
                 self._mode = 'PlayerB'
@@ -790,17 +817,29 @@ class Chess(Cog):
                     )
                     self._last_move = move
                     self._thonking = False
-                    await self._send_as_embed(ctx, "You are playing as Black against Computer!")
+                    match_start_embed.set_author(name="You are playing as Black against Computer!")
             else:
                 self._current_game = [Position(initial, 0, (True,True), (True,True), 0, 0)]
                 self._mode = 'PvP'
-                await self._send_as_embed(ctx, "This is a player vs player game! White goes first.")
+                match_start_embed.set_author(name="This is a player vs player game! White's turn.")
+            match_start_embed.add_field(
+                name='White',
+                value=w_player_list if w_player_list else '*' + self.bot.BOT_NAME + '* (CPU)',
+                inline=True
+            )
+            match_start_embed.add_field(
+                name='Black',
+                value=b_player_list if b_player_list else '*' + self.bot.BOT_NAME + '* (CPU)',
+                inline=True
+            )
+            await ctx.send(embed=match_start_embed)
             
             await self._send_board(ctx)
             if self._mode == 'PlayerB':
                 # Show First move
                 self._turn_is_white = False
                 await self._send_as_embed(ctx, "White: " + opening)
+                self._move_history.append(opening)
                 pass
             await self._send_as_embed(ctx, f"Make your first move with {self.bot.BOT_PREFIX}move!")
         else:
@@ -816,9 +855,11 @@ class Chess(Cog):
             if emote == 'wK':# '⬜': #
                 # White
                 self._participants['White'].add(payload.user_id)
+                self._participants['Names'][payload.user_id] = payload.member.display_name
             elif emote == 'bK': # '⬛':  #
                 # Black
                 self._participants['Black'].add(payload.user_id)
+                self._participants['Names'][payload.user_id] = payload.member.display_name
 
 
     @chess.command(name="stop")
@@ -925,7 +966,10 @@ class Chess(Cog):
         self._current_game.append(game.move(parsed_move))
         self._last_move = parsed_move
         playermove = (movefrom + moveto) if self._turn_is_white else (flip_move(movefrom) + flip_move(moveto))
-        await self._send_as_embed(ctx, ("White: " if self._turn_is_white else "Black: ..") + self._current_game[-2].board[parsed_move[0]].upper().replace('P', '') + playermove)
+        # Get the piece name and put it next to the playermove e.g. Qd2d4
+        recorded_move = self._current_game[-2].board[parsed_move[0]].upper().replace('P', '') + playermove
+        self._move_history.append(recorded_move)
+        await self._send_as_embed(ctx, ("White: " if self._turn_is_white else "Black: ..") + recorded_move)
         await self._send_reversed_board(ctx)
 
         if self._current_game[-1].score <= -MATE_LOWER:
@@ -943,7 +987,9 @@ class Chess(Cog):
                         break
                 self._current_game.append(self._current_game[-1].move(move))
                 self._last_move = move
-                await self._send_as_embed(ctx, ("Black" if self._turn_is_white else "White") + ": " + self._current_game[-2].board[move[0]].upper().replace('P', '') + render(move[0]) + render(move[1]))
+                computer_move = self._current_game[-2].board[move[0]].upper().replace('P', '') + render(move[0]) + render(move[1])
+                self._move_history.append(computer_move)
+                await self._send_as_embed(ctx, ("Black" if self._turn_is_white else "White") + ": " + computer_move)
             
                 self._turn_is_white = not self._turn_is_white
                 await self._send_board(ctx)
