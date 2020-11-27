@@ -528,12 +528,13 @@ opening_moves = ['d2d4'] * 18 + ['e2e4'] * 18 + ['c2c4'] * 15 + ['g1f3'] * 10 + 
 # Resign
 # Offer Draw
 # Save games to database
+# Castle
 # Check / Mate / Stalemate
 """
 VERSION_LOG = [
-    "v1.1.5: Takebacks.",
+    "v1.1.6: Fully functional takebacks.",
     "v1.1.4: Current match log and player list.",
-    "v1.1.3: Highlighted moves.",
+    "v1.1.3: Highlighted moves (external emoji).",
     "v1.1.2: Move record and eval bar option.",
     "v1.1.1: Multiple openings and quality of life.",
     "v1.1.0: Implemented PvP and PvC (Black or White).",
@@ -597,11 +598,12 @@ class Chess(Cog):
         score = board.score
 
         if self._last_move:
-            flip = (not self._turn_is_white and self._mode != "PlayerB") or (self._turn_is_white and self._mode == 'PlayerB')
+            flip = ((not self._turn_is_white and self._mode != "PlayerB") or (self._turn_is_white and self._mode == 'PlayerB')) ^ (self._takeback_accepted)
             last_move = self.convert_move_to_coord(self._last_move[-1], flip)
             # print(self._last_move, last_move)
         else:
             last_move = None
+        
 
         flipped = False
         if self._mode == 'PlayerW':
@@ -646,6 +648,7 @@ class Chess(Cog):
         self._current_game = None
         self._joining_msg = None
         self._takeback_msg = None
+        self._takeback_accepted = self._takeback_denied = False
         self._mode = None
         self._turn_is_white = True
         self._move_history = []
@@ -1076,8 +1079,10 @@ class Chess(Cog):
             else:
                 await self._send_as_embed(ctx, "Your last move was undone!")
             await self._send_board(ctx)
+            self._takeback_accepted = False
         elif self._takeback_denied:
             await self._send_as_embed(ctx, "Takeback request denied!")
+            self._takeback_denied = False
 
             
 
