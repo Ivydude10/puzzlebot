@@ -18,6 +18,7 @@ from cogs.triplet import Triplet
 from cogs.layton import Layton
 from cogs.cryptic import Cryptic
 from cogs.chess import Chess
+from cogs.codenames import Codenames
 
 load_dotenv()
 
@@ -64,6 +65,7 @@ class PazuChan(Bot):
         self.add_cog(Layton(self))
         self.add_cog(Cryptic(self))
         self.add_cog(Chess(self))
+        self.add_cog(Codenames(self))
 
 
     """
