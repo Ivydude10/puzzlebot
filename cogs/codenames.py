@@ -342,7 +342,7 @@ class Codenames(Cog):
         else:
             spymaster_name = Codenames.BLUE_SPYMASTER_EMOJI + self._participants['Names'][self._spymasters['Blue']]
             
-        self._expected_speakers = [p for p in self._participants[self._turn]] \
+        self._expected_speakers = [p for p in self._participants[self._turn] \
             if p not in self._participants['Spymasters']] # Comment this out when testing
         await self._send_as_embed(
             self._channel,
