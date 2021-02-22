@@ -91,7 +91,7 @@ class PazuChan(Bot):
             await log_channel.send(str(error_str))
         except Exception as e:
             print("No log channel found!!!")
-            raise e
+            print(error_str)
 
     """
     DATABASE WRAPPER

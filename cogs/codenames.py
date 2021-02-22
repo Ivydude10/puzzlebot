@@ -210,7 +210,7 @@ class Codenames(Cog):
     def reset_game(self):
         self._game_in_progress = False
         self._joining_msg = None
-        self._joining_time = 5
+        self._joining_time = 15
         self._turn = None
         self._expected_speakers = []
         self._channel = None
@@ -246,7 +246,7 @@ class Codenames(Cog):
         )
         game_starter = ctx.author.id
         self._participants['Blue'].add(game_starter)
-        self._participants['Red'].add(game_starter)
+        # self._participants['Red'].add(game_starter)
         self._participants['Names'][game_starter] = ctx.author.display_name
         msg = await ctx.send(embed=embed)
         await msg.add_reaction(Codenames.BLUE_EMOJI)
