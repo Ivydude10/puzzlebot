@@ -60,6 +60,7 @@ class Codenames(Cog):
     
     def _get_key_channel(self):
         for guild in self.bot.guilds:
+            print(guild.id)
             if guild.id == 601608082187091978:
                 return guild.get_channel(812885454205616158)
 
