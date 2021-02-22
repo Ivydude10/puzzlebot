@@ -33,6 +33,7 @@ class Codenames(Cog):
 
     RED_EMOJI = "🟥"
     BLUE_EMOJI = "🟦"
+    ANY_TEAM_EMOJI = "❔"
     RED_SPYMASTER_EMOJI = "<:redspymaster:812612601733185556>"
     BLUE_SPYMASTER_EMOJI = "<:bluespymaster:812612601930448924>"
 
@@ -200,10 +201,16 @@ class Codenames(Cog):
         if self._timers['Red'] < 0:
             await self._send_as_embed(self._channel, "BLUE WINS!", "by Timeout")
             self.timer.cancel()
+            self._game_state['Revealed'] = [1] * 25
+            self.generate_board_picture()
+            await self._send_board()
             self.reset_game()
         elif self._timers['Blue'] < 0:
             await self._send_as_embed(self._channel, "RED WINS!", "by Timeout")
             self.timer.cancel()
+            self._game_state['Revealed'] = [1] * 25
+            self.generate_board_picture()
+            await self._send_board()
             self.reset_game()
 
 
@@ -248,12 +255,13 @@ class Codenames(Cog):
             value="React to join the blue or red team. React to the spy icons to become spymaster." # PVP
         )
         game_starter = ctx.author.id
-        self._participants['Blue'].add(game_starter)
+        # self._participants['Blue'].add(game_starter) # Can uncomment this when testing
         # self._participants['Red'].add(game_starter)
         self._participants['Names'][game_starter] = ctx.author.display_name
         msg = await ctx.send(embed=embed)
         await msg.add_reaction(Codenames.BLUE_EMOJI)
         await msg.add_reaction(Codenames.RED_EMOJI)
+        await msg.add_reaction(Codenames.ANY_TEAM_EMOJI)
         await msg.add_reaction(Codenames.BLUE_SPYMASTER_EMOJI)
         await msg.add_reaction(Codenames.RED_SPYMASTER_EMOJI)
 
@@ -281,11 +289,27 @@ class Codenames(Cog):
 
         blue_spies = self._participants['Blue']
         red_spies = self._participants['Red']
+        red_spies.add(game_starter)
 
-        if len(blue_spies) < 2 or len(red_spies) < 2:
+        if len(blue_spies) + len(red_spies) < 4:
             await self._send_as_embed(ctx, "You don't have enough players to start!")
             self.reset_game()
             return # Can comment this out for testing with fewer than 4 players
+        else:
+            if len(blue_spies) - len(red_spies) > 1:
+                print("Balancing teams...")
+                chosen_one = random.choice(blue_spies)
+                self._participants['Blue'].remove(chosen_one)
+                self._participants['Red'].add(chosen_one)
+            elif len(red_spies) - len(blue_spies) > 1:
+                print("Balancing teams...")
+                chosen_one = random.choice(red_spies)
+                self._participants['Red'].remove(chosen_one)
+                self._participants['Blue'].add(chosen_one)
+    
+        blue_spies = self._participants['Blue']
+        red_spies = self._participants['Red']
+
         blue_spymasters = [p for p in blue_spies if p in self._participants['Spymasters']]
         red_spymasters = [p for p in red_spies if p in self._participants['Spymasters']]
         if len(blue_spymasters) == 0:
@@ -341,12 +365,15 @@ class Codenames(Cog):
     
     async def _start_turn(self):
         if self._turn == 'Red':
-            spymaster_name = Codenames.RED_SPYMASTER_EMOJI + self._participants['Names'][self._spymasters['Red']]
+            spymaster = self._spymasters['Red']
+            spymaster_name = Codenames.RED_SPYMASTER_EMOJI + self._participants['Names'][spymaster]
         else:
-            spymaster_name = Codenames.BLUE_SPYMASTER_EMOJI + self._participants['Names'][self._spymasters['Blue']]
+            spymaster = self._spymasters['Blue']
+            spymaster_name = Codenames.BLUE_SPYMASTER_EMOJI + self._participants['Names'][spymaster]
             
         self._expected_speakers = [p for p in self._participants[self._turn] \
             if p not in self._participants['Spymasters']] # Comment this out when testing
+        await self._channel.send(f"<@{spymaster}>")
         await self._send_as_embed(
             self._channel,
             f"{(Codenames.BLUE_EMOJI, Codenames.RED_EMOJI)[self._turn=='Red']}{self._turn} Spymaster, it is your turn.",
@@ -471,6 +498,16 @@ class Codenames(Cog):
                 self._participants['Red'].add(payload.user_id)
                 if payload.user_id in self._participants['Blue']:
                     self._participants['Blue'].remove(payload.user_id)
+                await self._joining_msg.remove_reaction(payload.emoji.name, payload.member)
+            elif emote == Codenames.ANY_TEAM_EMOJI:
+                if random.random() > 0.5:
+                    if payload.user_id in self._participants['Blue']:
+                        self._participants['Blue'].remove(payload.user_id)
+                    self._participants['Red'].add(payload.user_id)
+                else:
+                    if payload.user_id in self._participants['Red']:
+                        self._participants['Red'].remove(payload.user_id)
+                    self._participants['Blue'].add(payload.user_id)
                 await self._joining_msg.remove_reaction(payload.emoji.name, payload.member)
             elif emote == "bluespymaster": #Codenames.BLUE_SPYMASTER_EMOJI:
                 self._participants['Blue'].add(payload.user_id)
