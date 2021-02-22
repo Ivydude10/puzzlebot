@@ -118,6 +118,7 @@ if __name__ == '__main__':
             embed.add_field(name="?triplet", value="Try a triplet word puzzle")
             embed.add_field(name="?layton", value="Try a puzzle from Professor Layton")
             embed.add_field(name="?cryptic", value="Try a cryptic crossword clue")
+            embed.add_field(name="?codenames", value="Play Codenames")
             embed.set_footer(text="Type `?<command> help` to see more details about each command.")
         else:
             embed.set_author(name=f"{pazu.BOT_NAME} {cogname[0].strip().title()} Commands:")

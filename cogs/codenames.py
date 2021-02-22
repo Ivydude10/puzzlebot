@@ -51,7 +51,7 @@ class Codenames(Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.KEY_CHANNEL = self._get_key_channel()
+        # self.KEY_CHANNEL = self._get_key_channel()
         self.reset_game()
         self._team_timer = 2
         self._word_bank = {}
@@ -60,13 +60,15 @@ class Codenames(Cog):
     
     def _get_key_channel(self):
         for guild in self.bot.guilds:
-            print(guild.id)
             if guild.id == 601608082187091978:
                 return guild.get_channel(812885454205616158)
+        else:
+            print("ERROR! Cannot find guilds.")
 
     @Cog.listener()
     async def on_ready(self):
         print('Cog "Codenames" Ready!')
+        self.KEY_CHANNEL = self._get_key_channel()
 
     def _load_words(self):
         for filepath in glob.glob(Codenames.WORD_PACKS_PATH):
