@@ -255,8 +255,10 @@ class Codenames(Cog):
             value="React to join the blue or red team. React to the spy icons to become spymaster." # PVP
         )
         game_starter = ctx.author.id
-        # self._participants['Blue'].add(game_starter) # Can uncomment this when testing
-        # self._participants['Red'].add(game_starter)
+        if random.random() < 0.5:
+            self._participants['Blue'].add(game_starter) # Can uncomment this when testing
+        else:
+            self._participants['Red'].add(game_starter)
         self._participants['Names'][game_starter] = ctx.author.display_name
         msg = await ctx.send(embed=embed)
         await msg.add_reaction(Codenames.BLUE_EMOJI)
