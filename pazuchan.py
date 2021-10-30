@@ -21,9 +21,9 @@ from cogs.chess import Chess
 # from cogs.codenames import Codenames
 
 load_dotenv()
+
 intents = discord.Intents.default()
 intents.members = True
-
 
 EMBED_COLOUR = discord.Colour.green()
 
@@ -46,7 +46,7 @@ class PazuChan(Bot):
     INITIALISATION
     """
     def __init__(self):
-        super().__init__(command_prefix=PazuChan.BOT_PREFIX)
+        super().__init__(command_prefix=PazuChan.BOT_PREFIX, intents=intents)
         self.db = psycopg2.connect(os.getenv("DATABASE_URL"), sslmode="require")
         self.db.autocommit = True
 
