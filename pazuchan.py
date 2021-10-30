@@ -21,6 +21,9 @@ from cogs.chess import Chess
 # from cogs.codenames import Codenames
 
 load_dotenv()
+intents = discord.Intents.default()
+intents.members = True
+
 
 EMBED_COLOUR = discord.Colour.green()
 

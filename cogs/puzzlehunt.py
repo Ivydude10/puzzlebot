@@ -154,7 +154,7 @@ class PuzzleHunt(commands.Cog):
         self.bot.db_execute("INSERT INTO puzzledb.puzzlehunt_solvers (id, huntid, teamid) VALUES (%s, %s, %s)", (memberid, self._huntid, teamid))
         team_info = self._get_team_info(teamid)
         team_channel = ctx.guild.get_channel(team_info['Channel ID'])
-        member = ctx.guild.get_member(memberid)
+        member = ctx.guild.fetch_member(memberid)
         role = discord.utils.get(ctx.guild.roles, name=HUNT_ROLE)
         await member.add_roles(role)
         if team_channel:
