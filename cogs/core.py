@@ -3,9 +3,12 @@ import random
 from datetime import datetime
 
 import discord
+from discord.utils import get
 from discord.ext.commands import Cog, command, has_any_role, ExtensionAlreadyLoaded, ExtensionNotFound
 
-
+GUILD_ID = {
+    'PUZ': 560352591234465793,
+}
 
 class Core(Cog):
     """
@@ -25,21 +28,22 @@ class Core(Cog):
 
     @Cog.listener()
     async def on_member_join(self, member):
-        try:
-            greet_channel = self.bot.CHANNELS[member.guild.id]['GREET']
-            await greet_channel.send(
-                """{0.mention} *{1}*\nFeel free to introduce yourself here.""".format(
-                    member,
-                    random.choice([
-                        "I've been expecting you.",
-                        "Hey! You're finally awake.",
-                        "Hello there.",
-                        "Took you long enough.",
-                        "Glad you could make it."
-                    ])
-            ))
-        except:
-            raise Exception("No greet channel found!")
+        if member.guild.id == GUILD_ID['PUZ']:
+            try:
+                greet_channel = get(member.guild.text_channels, name='introductions')
+                await greet_channel.send(
+                    """{0.mention} *{1}*\nFeel free to introduce yourself here.""".format(
+                        member,
+                        random.choice([
+                            "I've been expecting you.",
+                            "Hey! You're finally awake.",
+                            "Hello there.",
+                            "Took you long enough.",
+                            "Glad you could make it."
+                        ])
+                ))
+            except:
+                raise Exception("No greet channel found!")
 
     @Cog.listener()
     async def on_ready(self):
@@ -104,13 +108,15 @@ class Core(Cog):
             await self.bot.log(str(e))
 
     @has_any_role("Bot Maintainer")
-    @command(name="say")
+    @command(name="say",
+             aliases = ['echo'])
     async def mouthpiece(self, ctx, channel: str, *, sentence):
         if channel.startswith('<'):
             channel = channel[2:-1]
-        if channel.isnumeric():
+        elif channel.isnumeric():
             channel = ctx.guild.get_channel(int(channel))
-            await channel.send(sentence)
+        await channel.send(sentence)
+        await ctx.message.add_reaction("✅")
 
 
 
