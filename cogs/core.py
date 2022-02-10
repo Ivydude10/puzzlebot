@@ -32,14 +32,15 @@ class Core(Cog):
             try:
                 greet_channel = get(member.guild.text_channels, name='introductions')
                 await greet_channel.send(
-                    """{0.mention} *{1}*\nFeel free to introduce yourself here.""".format(
+                    """{0.mention} {1}\nFeel free to introduce yourself here.""".format(
                         member,
                         random.choice([
                             "I've been expecting you.",
                             "Hey! You're finally awake.",
                             "Hello there.",
-                            "Took you long enough.",
-                            "Glad you could make it."
+                            "It's good to have you.",
+                            "Glad you could make it.",
+                            "It's nice to meet you."
                         ])
                 ))
             except:
