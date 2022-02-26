@@ -7,7 +7,7 @@ from discord.utils import get
 from discord.ext.commands import Cog, command, has_any_role, ExtensionAlreadyLoaded, ExtensionNotFound
 
 GUILD_ID = {
-    'PUZ': 560352591234465793,
+    'PUZ': 607421725101260801,
 }
 
 class Core(Cog):
